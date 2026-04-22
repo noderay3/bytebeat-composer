@@ -10,12 +10,77 @@ const TRANSPARENT = new Set([
 	'ParenthesizedExpression'
 ]);
 
+// Verbose name shown on the top line of an operator node — matches the
+// reference visual (e.g. "OR ( | )"). Anything not in this map falls back
+// to the raw operator text.
+const OP_VERBOSE = {
+	'+': 'sum ( + )',
+	'-': 'subtract ( − )',
+	'*': 'multiply ( × )',
+	'/': 'divide ( / )',
+	'%': 'modulo ( % )',
+	'&': 'AND ( & )',
+	'|': 'OR ( | )',
+	'^': 'XOR ( ^ )',
+	'<<': 'shift left ( << )',
+	'>>': 'shift right ( >> )',
+	'>>>': 'unsigned shift ( >>> )',
+	'&&': 'logical AND ( && )',
+	'||': 'logical OR ( || )',
+	'==': 'equals ( == )',
+	'!=': 'not equals ( != )',
+	'===': 'strict equals ( === )',
+	'!==': 'strict not equals ( !== )',
+	'<': 'less than ( < )',
+	'<=': 'less or equal ( <= )',
+	'>': 'greater than ( > )',
+	'>=': 'greater or equal ( >= )'
+};
+
+// Role determines the node's color. Mirrors the reference legend:
+// leaf = raw input (gray), op = combinator (blue), mul = constant gain (tan),
+// sum = mix (teal), output = synthetic byte conversion (green).
+function nodeRole(node) {
+	if(isLeafShape(node)) {
+		return 'leaf';
+	}
+	if(node.kind === 'MulConstExpression') {
+		return 'mul';
+	}
+	if(node.kind === 'BinaryExpression' && node.op === '+') {
+		return 'sum';
+	}
+	return 'op';
+}
+
+// "Leaf-shaped" for visualization purposes: bare literals / variables, and
+// also `t >> N` / `t << N` / `t & literal` — the canonical raw bytebeat
+// inputs that appear as gray boxes in the reference.
+function isLeafShape(node) {
+	if(!node) {
+		return false;
+	}
+	if(node.kind === 'Number' || node.kind === 'Variable' || node.kind === 'String') {
+		return true;
+	}
+	if(node.kind === 'BinaryExpression' && (node.op === '>>' || node.op === '<<')
+		&& node.children.length === 2
+		&& node.children[0] && node.children[0].kind === 'Variable'
+		&& node.children[0].op === 't'
+		&& node.children[1] && node.children[1].kind === 'Number') {
+		return true;
+	}
+	return false;
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
-const NODE_HEIGHT = 26;
-const NODE_PADDING = 14;
+const NODE_HEIGHT = 50;        // taller — fits operator + annotation lines
+const NODE_PADDING_X = 16;
 const CHAR_WIDTH = 7;
-const SIBLING_GAP = 12;
-const LEVEL_GAP = 22;
+const SIBLING_GAP = 14;
+const LEVEL_GAP = 36;
+const LANE_LABEL_HEIGHT = 18;  // headroom for "Voice A / B" labels above the top row
+const OUTPUT_GAP = 14;         // extra space before the synthetic 8-bit-output node
 
 export class Explorer {
 	constructor() {
@@ -110,11 +175,8 @@ export class Explorer {
 			return;
 		}
 		this.selectedId = id;
-		// Internal nodes toggle collapse on click; leaves are detail-only.
-		if(node.children.length > 0) {
-			node._collapsed = !node._collapsed;
-			this.relayout();
-		}
+		// Click only shows detail. Layout-changing collapse on click was
+		// confusing — the tree shifted under the user's pointer.
 		this.showDetail(node);
 	}
 	relayout() {
@@ -226,13 +288,23 @@ export class Explorer {
 		this.empty.classList.add('hidden');
 		this.assignIds(tree, { n: 0 });
 		this.measure(tree);
-		this.position(tree, 0, 4);
-		const totalW = tree._sw + 8;
-		const totalH = this.depth(tree) * (NODE_HEIGHT + LEVEL_GAP) + NODE_HEIGHT + 8;
+		// Bottom-up layout: leaves at y=top, root at y=bottom (signal flow).
+		const treeDepth = this.depth(tree);
+		const showVoices = tree.kind === 'BinaryExpression' && tree.op === '+' && tree.children.length >= 2;
+		const top = LANE_LABEL_HEIGHT + 4;
+		const rootY = top + treeDepth * (NODE_HEIGHT + LEVEL_GAP);
+		this.position(tree, 0, rootY);
+		const totalW = tree._sw + 16;
+		const totalH = rootY + NODE_HEIGHT + OUTPUT_GAP + NODE_HEIGHT + 8;
 		this.svg.setAttribute('width', String(totalW));
 		this.svg.setAttribute('height', String(totalH));
 		this.svg.setAttribute('viewBox', `0 0 ${ totalW } ${ totalH }`);
+		this.defineMarkers();
 		this.draw(tree);
+		if(showVoices) {
+			this.drawVoiceLabels(tree);
+		}
+		this.drawOutputNode(tree, totalW);
 	}
 	assignIds(node, counter) {
 		node._id = counter.n++;
@@ -242,8 +314,13 @@ export class Explorer {
 		}
 	}
 	measure(node) {
-		node._w = Math.max(40, NODE_PADDING + this.label(node).length * CHAR_WIDTH);
-		if(node.children.length === 0 || node._collapsed) {
+		const { top, bottom } = this.labels(node);
+		// CHAR_WIDTH suits the monospace top line; sans-serif bottom is a
+		// touch wider than mono at the same px size so we use ~6.5.
+		const topW = top.length * CHAR_WIDTH;
+		const botW = Math.ceil(bottom.length * 6.5);
+		node._w = Math.max(72, NODE_PADDING_X * 2 + Math.max(topW, botW));
+		if(this.isVisualLeaf(node)) {
 			node._sw = node._w;
 			return;
 		}
@@ -255,97 +332,207 @@ export class Explorer {
 		total += SIBLING_GAP * (node.children.length - 1);
 		node._sw = Math.max(node._w, total);
 	}
+	// "Visual leaf" — no children drawn, even when the AST has them. Captures
+	// raw bytebeat inputs like `t`, numbers, and `t >> N` / `t << N` /
+	// `t & literal`, which we display as a single gray box matching their
+	// source text instead of drilling into a 3-node subtree.
+	isVisualLeaf(node) {
+		return node.children.length === 0 || isLeafShape(node);
+	}
 	position(node, x, y) {
 		node._x = x + (node._sw - node._w) / 2;
 		node._y = y;
-		if(node.children.length === 0 || node._collapsed) {
+		if(this.isVisualLeaf(node)) {
 			return;
 		}
 		const total = node.children.reduce((s, c) => s + c._sw, 0)
 			+ SIBLING_GAP * (node.children.length - 1);
 		let cx = x + (node._sw - total) / 2;
 		for(const c of node.children) {
-			this.position(c, cx, y + NODE_HEIGHT + LEVEL_GAP);
+			// Children sit ABOVE the parent — signal flows down into the parent.
+			this.position(c, cx, y - NODE_HEIGHT - LEVEL_GAP);
 			cx += c._sw + SIBLING_GAP;
 		}
 	}
 	depth(node) {
-		if(node.children.length === 0 || node._collapsed) {
+		if(this.isVisualLeaf(node)) {
 			return 0;
 		}
 		return 1 + Math.max(...node.children.map(c => this.depth(c)));
 	}
 	draw(node) {
-		// Edges first so rects sit on top — skipped for collapsed subtrees.
-		if(!node._collapsed) {
-			for(const c of node.children) {
-				const x1 = node._x + node._w / 2;
-				const y1 = node._y + NODE_HEIGHT;
-				const x2 = c._x + c._w / 2;
-				const y2 = c._y;
-				const my = (y1 + y2) / 2;
-				const path = document.createElementNS(SVG_NS, 'path');
-				path.setAttribute('class', 'explorer-edge');
-				path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
-				this.svg.appendChild(path);
-			}
+		// Visual leaves draw their own box; no children are recursed into,
+		// so a `t >> 7` shows up as one gray rect rather than a 3-deep tree.
+		if(this.isVisualLeaf(node)) {
+			this.drawNode(node);
+			return;
 		}
-		// Wrap rect+text in a <g> carrying data-from/to + data-id so a single
-		// SVG-level handler can resolve hover/click back to the source range
-		// or to the canonical node record in this.byId.
+		// Edges go from each child's bottom into this node's top (downward
+		// signal flow, arrowhead at the parent end).
+		for(const c of node.children) {
+			const x1 = c._x + c._w / 2;
+			const y1 = c._y + NODE_HEIGHT;
+			const x2 = node._x + node._w / 2;
+			const y2 = node._y;
+			const my = (y1 + y2) / 2;
+			const path = document.createElementNS(SVG_NS, 'path');
+			path.setAttribute('class', 'explorer-edge');
+			path.setAttribute('marker-end', 'url(#explorer-arrow)');
+			path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
+			this.svg.appendChild(path);
+		}
+		this.drawNode(node);
+		for(const c of node.children) {
+			this.draw(c);
+		}
+	}
+	drawNode(node) {
+		const role = nodeRole(node);
+		const { top, bottom } = this.labels(node);
 		const g = document.createElementNS(SVG_NS, 'g');
-		g.setAttribute('class', 'explorer-node');
+		g.setAttribute('class', `explorer-node role-${ role }`);
 		g.setAttribute('data-from', String(node.from));
 		g.setAttribute('data-to', String(node.to));
 		g.setAttribute('data-id', String(node._id));
 		const rect = document.createElementNS(SVG_NS, 'rect');
-		const cls = ['explorer-node-rect'];
-		if(node.children.length === 0) cls.push('is-leaf');
-		if(node._collapsed && node.children.length > 0) cls.push('is-collapsed');
-		rect.setAttribute('class', cls.join(' '));
+		rect.setAttribute('class', 'explorer-node-rect');
 		rect.setAttribute('x', String(node._x));
 		rect.setAttribute('y', String(node._y));
 		rect.setAttribute('width', String(node._w));
 		rect.setAttribute('height', String(NODE_HEIGHT));
-		rect.setAttribute('rx', '6');
-		rect.setAttribute('ry', '6');
+		rect.setAttribute('rx', '8');
+		rect.setAttribute('ry', '8');
 		g.appendChild(rect);
-		const text = document.createElementNS(SVG_NS, 'text');
-		text.setAttribute('class', 'explorer-node-text');
-		text.setAttribute('x', String(node._x + node._w / 2));
-		text.setAttribute('y', String(node._y + NODE_HEIGHT / 2));
-		text.textContent = this.label(node);
-		g.appendChild(text);
+		const topText = document.createElementNS(SVG_NS, 'text');
+		topText.setAttribute('class', 'explorer-node-top');
+		topText.setAttribute('x', String(node._x + node._w / 2));
+		topText.setAttribute('y', String(node._y + (bottom ? 18 : NODE_HEIGHT / 2 + 4)));
+		topText.textContent = top;
+		g.appendChild(topText);
+		if(bottom) {
+			const botText = document.createElementNS(SVG_NS, 'text');
+			botText.setAttribute('class', 'explorer-node-bottom');
+			botText.setAttribute('x', String(node._x + node._w / 2));
+			botText.setAttribute('y', String(node._y + 35));
+			botText.textContent = bottom;
+			g.appendChild(botText);
+		}
 		this.svg.appendChild(g);
-		if(!node._collapsed) {
-			for(const c of node.children) {
-				this.draw(c);
-			}
-		}
 	}
-	// Compact label for a node — what shows inside the rect. Collapsed
-	// internal nodes get a trailing "…" so the suffix is part of the
-	// measured width and the text doesn't overflow the rect.
-	label(node) {
-		const suffix = (node._collapsed && node.children.length > 0) ? ' …' : '';
+	// Two-line label: top is the operator/value (verbose for combinators —
+	// e.g. "OR ( | )"), bottom is the short annotation when we have one.
+	// Visual leaves render their full source text on the top line ("t >> 7"
+	// instead of just ">>") since we never expose their interior.
+	labels(node) {
+		if(isLeafShape(node) && node.children.length > 0) {
+			return { top: node.text.length > 24 ? node.text.slice(0, 22) + '…' : node.text, bottom: '' };
+		}
+		const ann = this.annotator.shortLabel
+			? this.annotator.shortLabel(node, this.annotateContext(node))
+			: '';
 		switch(node.kind) {
-		case 'BinaryExpression':
-		case 'UnaryExpression': return node.op + suffix;
-		case 'ConditionalExpression': return '?:' + suffix;
-		case 'CallExpression': return node.op + suffix; // already "Math.sin()" etc.
+		case 'BinaryExpression': {
+			const verbose = OP_VERBOSE[node.op] || node.op;
+			return { top: verbose, bottom: ann };
+		}
+		case 'UnaryExpression': return { top: 'unary ' + node.op, bottom: ann };
+		case 'ConditionalExpression': return { top: '? :', bottom: 'if/else' };
+		case 'CallExpression': return { top: node.op, bottom: ann };
+		case 'MulConstExpression': return { top: node.op, bottom: ann };
 		case 'MemberExpression':
-			return (node.text.length > 16 ? node.text.slice(0, 14) + '…' : node.text) + suffix;
+			return { top: node.text.length > 18 ? node.text.slice(0, 16) + '…' : node.text, bottom: '' };
+		case 'Number': return { top: node.op, bottom: '' };
+		case 'Variable':
+			return { top: node.op, bottom: node.op === 't' ? 'sample index' : '' };
 		default:
-			return (node.op.length > 16 ? node.op.slice(0, 14) + '…' : node.op) + suffix;
+			return { top: node.op.length > 18 ? node.op.slice(0, 16) + '…' : node.op, bottom: '' };
 		}
 	}
-	// Parse a source string and return our simplified tree, or null if the
-	// source isn't a single classic expression (e.g. function-body forms).
+	annotateContext(node) {
+		return {
+			sampleRate: (globalThis.bytebeat && globalThis.bytebeat.sampleRate) || 8000,
+			isTop: node === this.lastTree,
+			isTopOfPlus: this.lastTree && this.lastTree.kind === 'BinaryExpression'
+				&& this.lastTree.op === '+' && this.lastTree.children.includes(node)
+		};
+	}
+	defineMarkers() {
+		const defs = document.createElementNS(SVG_NS, 'defs');
+		defs.innerHTML = `<marker id="explorer-arrow" viewBox="0 0 10 10" refX="9" refY="5"
+			markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+			<path d="M 0 0 L 10 5 L 0 10 z" class="explorer-arrowhead" />
+		</marker>`;
+		this.svg.appendChild(defs);
+	}
+	// Voice A / B / C labels above each top-level summand of a `+` root.
+	drawVoiceLabels(root) {
+		root.children.forEach((c, i) => {
+			const label = document.createElementNS(SVG_NS, 'text');
+			label.setAttribute('class', 'explorer-voice-label');
+			// Find the top-most node in this child's subtree to anchor above.
+			const topY = this.subtreeTopY(c);
+			label.setAttribute('x', String(c._x + c._w / 2));
+			label.setAttribute('y', String(Math.max(LANE_LABEL_HEIGHT - 2, topY - 4)));
+			label.textContent = 'Voice ' + String.fromCharCode(65 + i);
+			this.svg.appendChild(label);
+		});
+	}
+	subtreeTopY(node) {
+		if(node.children.length === 0) {
+			return node._y;
+		}
+		return Math.min(node._y, ...node.children.map(c => this.subtreeTopY(c)));
+	}
+	drawOutputNode(root, totalW) {
+		const w = 160;
+		const x = root._x + root._w / 2 - w / 2;
+		const y = root._y + NODE_HEIGHT + OUTPUT_GAP;
+		// Edge from root down into the output node
+		const path = document.createElementNS(SVG_NS, 'path');
+		path.setAttribute('class', 'explorer-edge');
+		path.setAttribute('marker-end', 'url(#explorer-arrow)');
+		const x1 = root._x + root._w / 2;
+		const y1 = root._y + NODE_HEIGHT;
+		const x2 = x + w / 2;
+		const my = (y1 + y) / 2;
+		path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y }`);
+		this.svg.appendChild(path);
+		const g = document.createElementNS(SVG_NS, 'g');
+		g.setAttribute('class', 'explorer-node role-output');
+		const rect = document.createElementNS(SVG_NS, 'rect');
+		rect.setAttribute('class', 'explorer-node-rect');
+		rect.setAttribute('x', String(x));
+		rect.setAttribute('y', String(y));
+		rect.setAttribute('width', String(w));
+		rect.setAttribute('height', String(NODE_HEIGHT));
+		rect.setAttribute('rx', '8');
+		rect.setAttribute('ry', '8');
+		g.appendChild(rect);
+		const top = document.createElementNS(SVG_NS, 'text');
+		top.setAttribute('class', 'explorer-node-top');
+		top.setAttribute('x', String(x + w / 2));
+		top.setAttribute('y', String(y + 18));
+		top.textContent = '8-bit audio sample';
+		g.appendChild(top);
+		const bottom = document.createElementNS(SVG_NS, 'text');
+		bottom.setAttribute('class', 'explorer-node-bottom');
+		bottom.setAttribute('x', String(x + w / 2));
+		bottom.setAttribute('y', String(y + 35));
+		const sr = (globalThis.bytebeat && globalThis.bytebeat.sampleRate) || 8000;
+		bottom.textContent = 'result & 255, at ' + (sr >= 1000 ? (sr / 1000) + ' kHz' : sr + ' Hz');
+		g.appendChild(bottom);
+		this.svg.appendChild(g);
+	}
+	// Parse a source string and return our simplified tree (post-processed
+	// for visualization: associative chains flattened, N*subtree collapsed
+	// to a "× N" unary), or null if the source isn't a single classic
+	// expression (e.g. function-body forms).
 	parse(source) {
 		this.lastSource = source;
 		const tree = javascriptLanguage.parser.parse(source);
 		const root = this.descend(tree.topNode);
-		this.lastTree = root ? this.build(root, source) : null;
+		const raw = root ? this.build(root, source) : null;
+		this.lastTree = raw ? specialize(flatten(raw)) : null;
 		return this.lastTree;
 	}
 	// Skip past Script / ExpressionStatement / ParenthesizedExpression wrappers
@@ -535,4 +722,65 @@ export class Explorer {
 		}
 		return false;
 	}
+}
+
+// Flatten left-leaning chains of the same associative+commutative operator
+// (`+`, `|`, `&`, `^`, `*`) into n-ary nodes so the renderer can show all
+// operands feeding into one combinator (matches the reference's "OR with
+// three inputs" rather than nested binaries).
+const ASSOC_OPS = new Set(['+', '|', '&', '^', '*']);
+function flatten(node) {
+	if(!node) {
+		return node;
+	}
+	if(node.kind === 'BinaryExpression' && ASSOC_OPS.has(node.op)) {
+		const flat = [];
+		const collect = n => {
+			if(n.kind === 'BinaryExpression' && n.op === node.op) {
+				for(const c of n.children) {
+					collect(c);
+				}
+			} else {
+				flat.push(flatten(n));
+			}
+		};
+		for(const c of node.children) {
+			collect(c);
+		}
+		return Object.assign({}, node, { children: flat });
+	}
+	if(node.children) {
+		return Object.assign({}, node, { children: node.children.map(flatten) });
+	}
+	return node;
+}
+
+// Re-shape `N * subtree` (or `subtree * N`) into a single MulConstExpression
+// with one child — renders as a "× N" gain box like the reference image.
+// Only one literal factor; if both sides are subtrees, leave it as a normal
+// BinaryExpression `*`. After flatten() above, n-ary `*` chains may have a
+// literal among siblings — pull it out.
+function specialize(node) {
+	if(!node) {
+		return node;
+	}
+	if(node.kind === 'BinaryExpression' && node.op === '*' && node.children.length >= 2) {
+		const literals = node.children.filter(c => c && c.kind === 'Number');
+		const others = node.children.filter(c => c && c.kind !== 'Number');
+		if(literals.length === 1 && others.length >= 1) {
+			const lit = literals[0];
+			const inner = others.length === 1
+				? specialize(others[0])
+				: specialize(Object.assign({}, node, { children: others }));
+			return Object.assign({}, node, {
+				kind: 'MulConstExpression',
+				op: '× ' + lit.op,
+				children: [inner]
+			});
+		}
+	}
+	if(node.children) {
+		return Object.assign({}, node, { children: node.children.map(specialize) });
+	}
+	return node;
 }

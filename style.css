@@ -1483,8 +1483,8 @@ button[name="close"] {
 	position: fixed;
 	top: 0;
 	right: 0;
-	width: 420px;
-	max-width: 50vw;
+	width: 560px;
+	max-width: 60vw;
 	height: 100vh;
 	background: var(--editor-bg);
 	border-left: 1px solid var(--ctrl-btn-border);
@@ -1621,3 +1621,67 @@ button[name="close"] {
 	font: bold 11px sans-serif;
 	padding: 0 8px;
 }
+
+/* ==[ Phase 7: signal-flow tree colors ] ================================================================= */
+
+.explorer-arrowhead {
+	fill: var(--ctrl-btn-border, #5c636c);
+}
+
+.explorer-node-rect {
+	fill: #2a3144;
+	stroke: #5c636c;
+	stroke-width: 1;
+}
+
+.explorer-node.role-leaf .explorer-node-rect {
+	fill: #2c2f37;
+	stroke: #5c636c;
+}
+
+.explorer-node.role-op .explorer-node-rect {
+	fill: #1c3653;
+	stroke: #4a86c2;
+}
+
+.explorer-node.role-mul .explorer-node-rect {
+	fill: #4a3820;
+	stroke: #c99a4a;
+}
+
+.explorer-node.role-sum .explorer-node-rect {
+	fill: #1f4640;
+	stroke: #4ec0a8;
+}
+
+.explorer-node.role-output .explorer-node-rect {
+	fill: #1f4222;
+	stroke: #4ec05a;
+}
+
+.explorer-node-top {
+	fill: #e3e3e3;
+	font: bold 12px ui-monospace, Menlo, monospace;
+	text-anchor: middle;
+	dominant-baseline: alphabetic;
+	pointer-events: none;
+}
+
+.explorer-node-bottom {
+	fill: #b6c4d8;
+	font: 10px sans-serif;
+	text-anchor: middle;
+	dominant-baseline: alphabetic;
+	pointer-events: none;
+}
+
+.explorer-voice-label {
+	fill: #b6c4d8;
+	font: bold 11px sans-serif;
+	text-anchor: middle;
+	pointer-events: none;
+	opacity: 0.9;
+}
+
+.explorer-node.role-mul .explorer-node-top { color: #ffd28a; }
+.explorer-node.role-output .explorer-node-top { color: #c8ffd0; }

@@ -87,7 +87,76 @@ const PATTERNS = [
 	}
 ];
 
+// Short, in-rect annotation (1–4 words). Returned for the bottom line
+// inside the SVG node — the longer prose label from annotate() goes in
+// the detail panel. Empty string means "no inline label, just the op".
+const SHORT_PATTERNS = [
+	{
+		match: n => isBinOp(n, '>>') && isVar(n.children[0], 't') && isLiteralInt(n.children[1]),
+		label: () => 'slowed t'
+	},
+	{
+		match: n => isBinOp(n, '<<') && isVar(n.children[0], 't') && isLiteralInt(n.children[1]),
+		label: () => 'sped-up t'
+	},
+	{
+		match: n => isBinOp(n, '&') && isVar(n.children[0], 't') && isLiteralInt(n.children[1])
+			&& isPowerOf2(parseLiteral(n.children[1].op) + 1),
+		label: n => `mod ${ parseLiteral(n.children[1].op) + 1 }`
+	},
+	{
+		match: n => isBinOp(n, '&') && (isVar(n.children[0], 't') || allShiftedTOrT(n.children[0]))
+			&& n.children.some(isShiftedT),
+		label: () => 'slow gates fast'
+	},
+	{
+		match: n => isBinOp(n, '|') && allShiftedTOrT(n) && countTLeaves(n) >= 3,
+		label: n => `stack ${ n.children.length } waveforms`
+	},
+	{
+		match: n => isBinOp(n, '^') && isVar(n.children[0], 't') && isShiftedT(n.children[1]),
+		label: () => 'XOR phase'
+	},
+	{
+		match: n => isBinOp(n, '%') && isVar(n.children[0], 't') && isLiteralInt(n.children[1]),
+		label: n => `period ${ n.children[1].op }`
+	}
+];
+
+const SHORT_BY_KIND = {
+	BinaryExpression: n => {
+		switch(n.op) {
+		case '+': return 'mix voices';
+		case '|': return 'layer in ' + (n.children[1] ? '…' : '');
+		case '&': return 'gate';
+		case '^': return 'XOR';
+		case '*': return 'multiply';
+		default: return '';
+		}
+	},
+	MulConstExpression: () => 'gain',
+	UnaryExpression: () => '',
+	ConditionalExpression: () => 'choose',
+	CallExpression: () => 'call',
+	MemberExpression: () => '',
+	Number: () => '',
+	Variable: n => n.op === 't' ? 'sample index' : ''
+};
+
 export class Annotator {
+	shortLabel(node, context) {
+		if(!node) {
+			return '';
+		}
+		const ctx = Object.assign({ sampleRate: 8000, isTop: false, isTopOfPlus: false }, context || {});
+		for(const p of SHORT_PATTERNS) {
+			if(p.match(node, ctx)) {
+				return p.label(node, ctx);
+			}
+		}
+		const make = SHORT_BY_KIND[node.kind];
+		return make ? make(node, ctx) : '';
+	}
 	annotate(node, context) {
 		if(!node) {
 			return '';
