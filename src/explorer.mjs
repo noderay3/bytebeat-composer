@@ -1,4 +1,5 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript';
+import { Annotator } from './annotator.mjs';
 
 // Lezer node types we treat as transparent — descend through them without
 // emitting a node in our simplified tree.
@@ -22,14 +23,24 @@ export class Explorer {
 		this.panel = null;
 		this.svg = null;
 		this.empty = null;
+		this.detail = null;
+		this.detailSource = null;
+		this.detailAnnotation = null;
 		this.isOpen = false;
+		this.annotator = new Annotator();
+		this.byId = new Map();
+		this.selectedId = null;
 	}
 	initElements() {
 		this.panel = document.getElementById('explorer-panel');
 		this.svg = document.getElementById('explorer-svg');
 		this.empty = document.getElementById('explorer-empty');
+		this.detail = document.getElementById('explorer-detail');
+		this.detailSource = this.detail.querySelector('.explorer-source');
+		this.detailAnnotation = this.detail.querySelector('.explorer-annotation');
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
+		this.svg.addEventListener('click', e => this.onSvgClick(e));
 	}
 	// Re-parse + re-render on editor changes, but only while the panel is open.
 	// Debounced so rapid typing doesn't churn the SVG.
@@ -62,6 +73,33 @@ export class Explorer {
 			ed.clearExplorerHighlight();
 		}
 	}
+	onSvgClick(e) {
+		const g = e.target.closest('[data-id]');
+		if(!g) {
+			return;
+		}
+		const id = +g.getAttribute('data-id');
+		const node = this.byId.get(id);
+		if(!node) {
+			return;
+		}
+		this.selectedId = id;
+		this.showDetail(node);
+	}
+	showDetail(node) {
+		if(!this.detail) {
+			return;
+		}
+		this.detail.classList.remove('hidden');
+		this.detailSource.textContent = node.text;
+		const ctx = {
+			sampleRate: (globalThis.bytebeat && globalThis.bytebeat.sampleRate) || 8000,
+			isTop: node === this.lastTree,
+			isTopOfPlus: this.lastTree && this.lastTree.kind === 'BinaryExpression'
+				&& this.lastTree.op === '+' && this.lastTree.children.includes(node)
+		};
+		this.detailAnnotation.textContent = this.annotator.annotate(node, ctx);
+	}
 	toggle(source) {
 		this.isOpen ? this.close() : this.open(source);
 	}
@@ -85,6 +123,11 @@ export class Explorer {
 		}
 		const tree = this.parse(source);
 		this.svg.replaceChildren();
+		this.byId.clear();
+		this.selectedId = null;
+		if(this.detail) {
+			this.detail.classList.add('hidden');
+		}
 		if(!tree) {
 			this.empty.classList.remove('hidden');
 			this.svg.setAttribute('width', '0');
@@ -92,6 +135,7 @@ export class Explorer {
 			return;
 		}
 		this.empty.classList.add('hidden');
+		this.assignIds(tree, { n: 0 });
 		this.measure(tree);
 		this.position(tree, 0, 4);
 		const totalW = tree._sw + 8;
@@ -100,6 +144,13 @@ export class Explorer {
 		this.svg.setAttribute('height', String(totalH));
 		this.svg.setAttribute('viewBox', `0 0 ${ totalW } ${ totalH }`);
 		this.draw(tree);
+	}
+	assignIds(node, counter) {
+		node._id = counter.n++;
+		this.byId.set(node._id, node);
+		for(const c of node.children) {
+			this.assignIds(c, counter);
+		}
 	}
 	measure(node) {
 		node._w = Math.max(40, NODE_PADDING + this.label(node).length * CHAR_WIDTH);
@@ -148,12 +199,14 @@ export class Explorer {
 			path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
 			this.svg.appendChild(path);
 		}
-		// Wrap rect+text in a <g> carrying data-from/to so a single SVG-level
-		// mouseover handler can map the event to a source range.
+		// Wrap rect+text in a <g> carrying data-from/to + data-id so a single
+		// SVG-level handler can resolve hover/click back to the source range
+		// or to the canonical node record in this.byId.
 		const g = document.createElementNS(SVG_NS, 'g');
 		g.setAttribute('class', 'explorer-node');
 		g.setAttribute('data-from', String(node.from));
 		g.setAttribute('data-to', String(node.to));
+		g.setAttribute('data-id', String(node._id));
 		const rect = document.createElementNS(SVG_NS, 'rect');
 		rect.setAttribute('class', 'explorer-node-rect' + (node.children.length === 0 ? ' is-leaf' : ''));
 		rect.setAttribute('x', String(node._x));
