@@ -8,10 +8,144 @@ const TRANSPARENT = new Set([
 	'ParenthesizedExpression'
 ]);
 
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const NODE_HEIGHT = 26;
+const NODE_PADDING = 14;
+const CHAR_WIDTH = 7;
+const SIBLING_GAP = 12;
+const LEVEL_GAP = 22;
+
 export class Explorer {
 	constructor() {
 		this.lastSource = '';
 		this.lastTree = null;
+		this.panel = null;
+		this.svg = null;
+		this.empty = null;
+		this.isOpen = false;
+	}
+	initElements() {
+		this.panel = document.getElementById('explorer-panel');
+		this.svg = document.getElementById('explorer-svg');
+		this.empty = document.getElementById('explorer-empty');
+	}
+	toggle(source) {
+		this.isOpen ? this.close() : this.open(source);
+	}
+	open(source) {
+		if(!this.panel) {
+			return;
+		}
+		this.isOpen = true;
+		this.panel.classList.remove('hidden');
+		this.render(source);
+	}
+	close() {
+		this.isOpen = false;
+		if(this.panel) {
+			this.panel.classList.add('hidden');
+		}
+	}
+	render(source) {
+		if(!this.svg) {
+			return;
+		}
+		const tree = this.parse(source);
+		this.svg.replaceChildren();
+		if(!tree) {
+			this.empty.classList.remove('hidden');
+			this.svg.setAttribute('width', '0');
+			this.svg.setAttribute('height', '0');
+			return;
+		}
+		this.empty.classList.add('hidden');
+		this.measure(tree);
+		this.position(tree, 0, 4);
+		const totalW = tree._sw + 8;
+		const totalH = this.depth(tree) * (NODE_HEIGHT + LEVEL_GAP) + NODE_HEIGHT + 8;
+		this.svg.setAttribute('width', String(totalW));
+		this.svg.setAttribute('height', String(totalH));
+		this.svg.setAttribute('viewBox', `0 0 ${ totalW } ${ totalH }`);
+		this.draw(tree);
+	}
+	measure(node) {
+		node._w = Math.max(40, NODE_PADDING + this.label(node).length * CHAR_WIDTH);
+		if(node.children.length === 0) {
+			node._sw = node._w;
+			return;
+		}
+		let total = 0;
+		for(const c of node.children) {
+			this.measure(c);
+			total += c._sw;
+		}
+		total += SIBLING_GAP * (node.children.length - 1);
+		node._sw = Math.max(node._w, total);
+	}
+	position(node, x, y) {
+		node._x = x + (node._sw - node._w) / 2;
+		node._y = y;
+		if(node.children.length === 0) {
+			return;
+		}
+		const total = node.children.reduce((s, c) => s + c._sw, 0)
+			+ SIBLING_GAP * (node.children.length - 1);
+		let cx = x + (node._sw - total) / 2;
+		for(const c of node.children) {
+			this.position(c, cx, y + NODE_HEIGHT + LEVEL_GAP);
+			cx += c._sw + SIBLING_GAP;
+		}
+	}
+	depth(node) {
+		if(node.children.length === 0) {
+			return 0;
+		}
+		return 1 + Math.max(...node.children.map(c => this.depth(c)));
+	}
+	draw(node) {
+		// Edges first so rects sit on top
+		for(const c of node.children) {
+			const x1 = node._x + node._w / 2;
+			const y1 = node._y + NODE_HEIGHT;
+			const x2 = c._x + c._w / 2;
+			const y2 = c._y;
+			const my = (y1 + y2) / 2;
+			const path = document.createElementNS(SVG_NS, 'path');
+			path.setAttribute('class', 'explorer-edge');
+			path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
+			this.svg.appendChild(path);
+		}
+		const rect = document.createElementNS(SVG_NS, 'rect');
+		rect.setAttribute('class', 'explorer-node-rect' + (node.children.length === 0 ? ' is-leaf' : ''));
+		rect.setAttribute('x', String(node._x));
+		rect.setAttribute('y', String(node._y));
+		rect.setAttribute('width', String(node._w));
+		rect.setAttribute('height', String(NODE_HEIGHT));
+		rect.setAttribute('rx', '6');
+		rect.setAttribute('ry', '6');
+		this.svg.appendChild(rect);
+		const text = document.createElementNS(SVG_NS, 'text');
+		text.setAttribute('class', 'explorer-node-text');
+		text.setAttribute('x', String(node._x + node._w / 2));
+		text.setAttribute('y', String(node._y + NODE_HEIGHT / 2));
+		text.textContent = this.label(node);
+		this.svg.appendChild(text);
+		for(const c of node.children) {
+			this.draw(c);
+		}
+	}
+	// Compact label for a node — what shows inside the rect.
+	label(node) {
+		switch(node.kind) {
+		case 'BinaryExpression':
+		case 'UnaryExpression': return node.op;
+		case 'ConditionalExpression': return '?:';
+		case 'CallExpression': return node.op; // already "Math.sin()" etc.
+		case 'MemberExpression':
+			return node.text.length > 16 ? node.text.slice(0, 14) + '…' : node.text;
+		default:
+			return node.op.length > 16 ? node.op.slice(0, 14) + '…' : node.op;
+		}
 	}
 	// Parse a source string and return our simplified tree, or null if the
 	// source isn't a single classic expression (e.g. function-body forms).

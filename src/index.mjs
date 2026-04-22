@@ -90,6 +90,8 @@ globalThis.bytebeat = new class {
 			case 'control-counter':
 			case 'control-pause': this.playbackToggle(false); break;
 			case 'control-expand': ui.expandEditor(); break;
+			case 'control-explore': explorer.toggle(editor.value); break;
+			case 'explorer-close': explorer.close(); break;
 			case 'control-link': ui.copyLink(); break;
 			case 'control-play-backward': this.playbackToggle(true, true, -1); break;
 			case 'control-play-forward': this.playbackToggle(true, true, 1); break;
@@ -182,6 +184,7 @@ globalThis.bytebeat = new class {
 		// Expose the explorer on the global so we can iterate from devtools
 		// without rebuilding (e.g. bytebeat.explorer.parse(editor.value)).
 		this.explorer = explorer;
+		explorer.initElements();
 		ui.initElements();
 		scope.initElements();
 		library.initElements();

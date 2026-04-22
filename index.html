@@ -106,6 +106,7 @@
 					<button id="control-expand" class="control-button" title="Expand the code editor">
 						<svg><use xlink:href="#symbol-expand"></use></svg>
 					</button>
+					<button id="control-explore" class="control-button" title="Explore expression tree">tree</button>
 					<span id="control-codesize" class="control-text" title="Code size in bytes"></span>
 				</div>
 				<div class="controls-group controls-grow">
@@ -310,6 +311,22 @@
 			</footer>
 		</section>
 	</main>
+
+	<aside id="explorer-panel" class="hidden" aria-label="Expression tree explorer">
+		<div class="explorer-header">
+			<span class="explorer-title">Expression tree</span>
+			<button id="explorer-close" class="control-button" title="Close">×</button>
+		</div>
+		<div id="explorer-tree" class="explorer-tree">
+			<svg id="explorer-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+		</div>
+		<div id="explorer-detail" class="explorer-detail hidden">
+			<div class="explorer-source"></div>
+			<div class="explorer-annotation"></div>
+			<button id="explorer-solo" class="control-button">Solo</button>
+		</div>
+		<div id="explorer-empty" class="explorer-empty hidden">unsupported form — classic expression mode only</div>
+	</aside>
 
 	<!-- SVG BUTTONS -->
 	<div id="svg-icons" style="height: 0; width: 0; overflow: hidden;">

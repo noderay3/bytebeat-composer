@@ -1476,3 +1476,108 @@ button[name="close"] {
 		resize: none;
 	}
 }
+
+/* ==[ Expression explorer panel ] ======================================================================== */
+
+#explorer-panel {
+	position: fixed;
+	top: 0;
+	right: 0;
+	width: 420px;
+	max-width: 50vw;
+	height: 100vh;
+	background: var(--editor-bg);
+	border-left: 1px solid var(--ctrl-btn-border);
+	color: var(--ctrl-btn-color);
+	display: flex;
+	flex-direction: column;
+	z-index: 100;
+	box-shadow: -4px 0 12px rgba(0, 0, 0, 0.4);
+}
+
+.explorer-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 8px 12px;
+	border-bottom: 1px solid var(--ctrl-btn-border);
+}
+
+.explorer-title {
+	font: bold var(--font-size) sans-serif;
+}
+
+#explorer-close {
+	width: var(--ctrl-size);
+	font-size: 18px;
+}
+
+.explorer-tree {
+	flex: 1;
+	overflow: auto;
+	padding: 8px;
+}
+
+#explorer-svg {
+	display: block;
+}
+
+.explorer-node-rect {
+	fill: var(--ctrl-btn-bg, #2a3144);
+	stroke: var(--ctrl-btn-border, #5c636c);
+	stroke-width: 1;
+}
+
+.explorer-node-rect.is-leaf {
+	fill: var(--ctrl-text-bg, #1a1f2c);
+}
+
+.explorer-node-text {
+	fill: var(--ctrl-btn-color, #e3e3e3);
+	font: bold 12px ui-monospace, Menlo, monospace;
+	text-anchor: middle;
+	dominant-baseline: central;
+	pointer-events: none;
+}
+
+.explorer-edge {
+	fill: none;
+	stroke: var(--ctrl-btn-border, #5c636c);
+	stroke-width: 1;
+}
+
+.explorer-detail {
+	border-top: 1px solid var(--ctrl-btn-border);
+	padding: 8px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.explorer-source {
+	font: 11px ui-monospace, Menlo, monospace;
+	color: var(--ctrl-btn-hover-color, #badbff);
+	background: var(--ctrl-text-bg);
+	padding: 6px 8px;
+	border-radius: 4px;
+	max-height: 80px;
+	overflow: auto;
+	white-space: pre-wrap;
+}
+
+.explorer-annotation {
+	font: 12px sans-serif;
+	color: var(--ctrl-btn-color);
+}
+
+#explorer-solo {
+	align-self: flex-start;
+	padding: 0 12px;
+}
+
+.explorer-empty {
+	padding: 12px;
+	font: 12px sans-serif;
+	color: var(--ctrl-btn-color);
+	opacity: 0.7;
+}
