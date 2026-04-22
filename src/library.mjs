@@ -210,7 +210,10 @@ export class Library {
 		const libName = containerElem.id.replace('library-', '');
 		const response = await fetch(this.pathLibrary + libName + '.gz');
 		const { status } = response;
-		if(status !== 200 && status !== 304) {
+		// status === 0 is the success case for file:// fetches in WebKit
+		// (the response is opaque-ish but body still reads). Accept it so
+		// the offline self-hosted bundle works in WKWebView.
+		if(status !== 0 && status !== 200 && status !== 304) {
 			state.remove('loaded');
 			containerElem.innerHTML = `<div class="loading-error">Unable to load the library: ${ status } ${
 				response.statusText }</div>`;
