@@ -92,6 +92,9 @@ globalThis.bytebeat = new class {
 			case 'control-expand': ui.expandEditor(); break;
 			case 'control-explore': explorer.toggle(editor.value); break;
 			case 'explorer-close': explorer.close(); break;
+			case 'explorer-solo':
+				explorer.preSoloSource === null ? explorer.soloSelected() : explorer.unsolo();
+				break;
 			case 'control-link': ui.copyLink(); break;
 			case 'control-play-backward': this.playbackToggle(true, true, -1); break;
 			case 'control-play-forward': this.playbackToggle(true, true, 1); break;

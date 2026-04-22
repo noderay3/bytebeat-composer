@@ -1,5 +1,6 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript';
 import { Annotator } from './annotator.mjs';
+import { serialize } from './serializer.mjs';
 
 // Lezer node types we treat as transparent — descend through them without
 // emitting a node in our simplified tree.
@@ -30,6 +31,12 @@ export class Explorer {
 		this.annotator = new Annotator();
 		this.byId = new Map();
 		this.selectedId = null;
+		// When a subtree is soloed, the original full source goes here so we
+		// can restore it on Unsolo. null when no solo is active.
+		this.preSoloSource = null;
+		// Snapshot of the subtree we soloed — render() compares against this
+		// so editor-driven re-render doesn't strand us in solo mode.
+		this.soloedNodeText = null;
 	}
 	initElements() {
 		this.panel = document.getElementById('explorer-panel');
@@ -99,6 +106,50 @@ export class Explorer {
 				&& this.lastTree.op === '+' && this.lastTree.children.includes(node)
 		};
 		this.detailAnnotation.textContent = this.annotator.annotate(node, ctx);
+		this.refreshSoloButton();
+	}
+	soloSelected() {
+		if(this.selectedId == null) {
+			return;
+		}
+		const node = this.byId.get(this.selectedId);
+		if(!node) {
+			return;
+		}
+		const ed = globalThis.bytebeat && globalThis.bytebeat.editor;
+		if(!ed) {
+			return;
+		}
+		const sub = serialize(node);
+		// Save the original on first solo only — chained solos drill deeper
+		// without forgetting the way back out.
+		if(this.preSoloSource === null) {
+			this.preSoloSource = this.lastSource;
+		}
+		this.soloedNodeText = sub;
+		ed.setValue(sub);
+		this.refreshSoloButton();
+	}
+	unsolo() {
+		if(this.preSoloSource === null) {
+			return;
+		}
+		const ed = globalThis.bytebeat && globalThis.bytebeat.editor;
+		if(!ed) {
+			return;
+		}
+		const restored = this.preSoloSource;
+		this.preSoloSource = null;
+		this.soloedNodeText = null;
+		ed.setValue(restored);
+		this.refreshSoloButton();
+	}
+	refreshSoloButton() {
+		const btn = document.getElementById('explorer-solo');
+		if(!btn) {
+			return;
+		}
+		btn.textContent = this.preSoloSource === null ? 'Solo' : 'Unsolo';
 	}
 	toggle(source) {
 		this.isOpen ? this.close() : this.open(source);
