@@ -90,8 +90,10 @@ globalThis.bytebeat = new class {
 			case 'control-counter':
 			case 'control-pause': this.playbackToggle(false); break;
 			case 'control-expand': ui.expandEditor(); break;
-			case 'control-explore': explorer.toggle(editor.value); break;
-			case 'explorer-close': explorer.close(); break;
+			case 'control-explore':
+			case 'explorer-handle':
+				explorer.toggle(editor.value);
+				break;
 			case 'explorer-solo':
 				explorer.preSoloSource === null ? explorer.soloSelected() : explorer.unsolo();
 				break;

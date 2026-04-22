@@ -110,28 +110,9 @@ export class Explorer {
 		this.detail = document.getElementById('explorer-detail');
 		this.detailSource = this.detail.querySelector('.explorer-source');
 		this.detailAnnotation = this.detail.querySelector('.explorer-annotation');
-		this.resizer = document.getElementById('explorer-resizer');
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
 		this.svg.addEventListener('click', e => this.onSvgClick(e));
-		if(this.resizer) {
-			this.resizer.addEventListener('mousedown', e => this.startResize(e));
-		}
-	}
-	startResize(e) {
-		e.preventDefault();
-		const startX = e.clientX;
-		const startW = this.panel.getBoundingClientRect().width;
-		const onMove = ev => {
-			const w = Math.max(300, Math.min(window.innerWidth * 0.8, startW - (ev.clientX - startX)));
-			this.panel.style.width = w + 'px';
-		};
-		const onUp = () => {
-			document.removeEventListener('mousemove', onMove);
-			document.removeEventListener('mouseup', onUp);
-		};
-		document.addEventListener('mousemove', onMove);
-		document.addEventListener('mouseup', onUp);
 	}
 	// Re-parse + re-render on editor changes, but only while the panel is open.
 	// Debounced so rapid typing doesn't churn the SVG.
@@ -259,13 +240,21 @@ export class Explorer {
 			return;
 		}
 		this.isOpen = true;
-		this.panel.classList.remove('hidden');
+		this.panel.classList.remove('is-collapsed');
+		this.updateHandleTitle();
 		this.render(source);
 	}
 	close() {
 		this.isOpen = false;
 		if(this.panel) {
-			this.panel.classList.add('hidden');
+			this.panel.classList.add('is-collapsed');
+			this.updateHandleTitle();
+		}
+	}
+	updateHandleTitle() {
+		const handle = document.getElementById('explorer-handle');
+		if(handle) {
+			handle.title = this.isOpen ? 'Close expression tree' : 'Open expression tree';
 		}
 	}
 	render(source) {

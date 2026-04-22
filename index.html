@@ -312,21 +312,26 @@
 		</section>
 	</main>
 
-	<aside id="explorer-panel" class="hidden" aria-label="Expression tree explorer">
-		<div id="explorer-resizer" class="explorer-resizer" title="Drag to resize"></div>
-		<div class="explorer-header">
-			<span class="explorer-title">Expression tree</span>
-			<button id="explorer-close" class="control-button" title="Close">×</button>
+	<aside id="explorer-panel" class="is-collapsed" aria-label="Expression tree explorer">
+		<button id="explorer-handle" class="explorer-handle" title="Open expression tree" aria-label="Toggle expression tree panel">
+			<svg class="explorer-chevron" viewBox="0 0 16 24" aria-hidden="true">
+				<polyline points="11 4 5 12 11 20" />
+			</svg>
+		</button>
+		<div class="explorer-body">
+			<div class="explorer-header">
+				<span class="explorer-title">Expression tree</span>
+			</div>
+			<div id="explorer-tree" class="explorer-tree">
+				<svg id="explorer-svg" xmlns="http://www.w3.org/2000/svg"></svg>
+			</div>
+			<div id="explorer-detail" class="explorer-detail hidden">
+				<div class="explorer-source"></div>
+				<div class="explorer-annotation"></div>
+				<button id="explorer-solo" class="control-button">Solo</button>
+			</div>
+			<div id="explorer-empty" class="explorer-empty hidden">unsupported form — classic expression mode only</div>
 		</div>
-		<div id="explorer-tree" class="explorer-tree">
-			<svg id="explorer-svg" xmlns="http://www.w3.org/2000/svg"></svg>
-		</div>
-		<div id="explorer-detail" class="explorer-detail hidden">
-			<div class="explorer-source"></div>
-			<div class="explorer-annotation"></div>
-			<button id="explorer-solo" class="control-button">Solo</button>
-		</div>
-		<div id="explorer-empty" class="explorer-empty hidden">unsupported form — classic expression mode only</div>
 	</aside>
 
 	<!-- SVG BUTTONS -->

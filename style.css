@@ -1483,22 +1483,80 @@ button[name="close"] {
 	position: fixed;
 	top: 0;
 	right: 0;
-	width: 560px;
-	max-width: 60vw;
 	height: 100vh;
 	background: var(--editor-bg);
-	border-left: 1px solid var(--ctrl-btn-border);
 	color: var(--ctrl-btn-color);
 	display: flex;
-	flex-direction: column;
+	flex-direction: row;
 	z-index: 100;
 	box-shadow: -4px 0 12px rgba(0, 0, 0, 0.4);
+	transition: width 160ms ease;
+	width: 560px;
+	max-width: 60vw;
+	border-left: 1px solid var(--ctrl-btn-border);
+}
+
+#explorer-panel.is-collapsed {
+	width: 22px;
+	max-width: 22px;
+}
+
+#explorer-panel.is-collapsed .explorer-body {
+	display: none;
+}
+
+.explorer-handle {
+	flex: 0 0 22px;
+	width: 22px;
+	height: 100%;
+	border: none;
+	background: var(--ctrl-text-bg);
+	border-right: 1px solid var(--ctrl-btn-border);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	color: var(--ctrl-btn-color);
+	padding: 0;
+}
+
+.explorer-handle:hover {
+	background: var(--ctrl-btn-hover-bg);
+	color: var(--ctrl-btn-hover-color);
+}
+
+.explorer-chevron {
+	width: 12px;
+	height: 18px;
+	fill: none;
+	stroke: currentColor;
+	stroke-width: 2;
+	stroke-linecap: round;
+	stroke-linejoin: round;
+	transition: transform 160ms ease;
+	pointer-events: none;
+}
+
+#explorer-panel.is-collapsed .explorer-chevron {
+	/* Closed → arrow points LEFT, inviting click to push panel out into view. */
+	transform: rotate(0deg);
+}
+
+#explorer-panel:not(.is-collapsed) .explorer-chevron {
+	/* Open → arrow flips RIGHT, signaling click would dismiss panel. */
+	transform: rotate(180deg);
+}
+
+.explorer-body {
+	flex: 1 1 auto;
+	display: flex;
+	flex-direction: column;
+	min-width: 0;
 }
 
 .explorer-header {
 	display: flex;
 	align-items: center;
-	justify-content: space-between;
 	padding: 8px 12px;
 	border-bottom: 1px solid var(--ctrl-btn-border);
 }
@@ -1507,19 +1565,18 @@ button[name="close"] {
 	font: bold var(--font-size) sans-serif;
 }
 
-#explorer-close {
-	width: var(--ctrl-size);
-	font-size: 18px;
-}
-
 .explorer-tree {
 	flex: 1;
 	overflow: auto;
-	padding: 8px;
+	padding: 12px 8px;
+	display: flex;
+	justify-content: center;
+	align-items: flex-start;
 }
 
 #explorer-svg {
 	display: block;
+	margin: 0 auto;
 }
 
 .explorer-node-rect {
@@ -1595,21 +1652,6 @@ button[name="close"] {
 .explorer-node:hover .explorer-node-rect {
 	stroke: #4af;
 	stroke-width: 1.5;
-}
-
-.explorer-resizer {
-	position: absolute;
-	top: 0;
-	left: 0;
-	width: 5px;
-	height: 100%;
-	cursor: ew-resize;
-	background: transparent;
-	z-index: 1;
-}
-
-.explorer-resizer:hover {
-	background: var(--ctrl-btn-border);
 }
 
 .explorer-node-rect.is-collapsed {
