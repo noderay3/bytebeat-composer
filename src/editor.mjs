@@ -3,10 +3,35 @@ import { defaultKeymap, history, historyKeymap, indentLess, insertNewline, redo 
 import { javascript } from '@codemirror/lang-javascript';
 import { bracketMatching, foldGutter, indentUnit, syntaxHighlighting } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { EditorState } from '@codemirror/state';
-import { highlightActiveLine, highlightSpecialChars, EditorView, keymap, lineNumbers }
+import { EditorState, StateEffect, StateField } from '@codemirror/state';
+import { Decoration, highlightActiveLine, highlightSpecialChars, EditorView, keymap, lineNumbers }
 	from '@codemirror/view';
 import { tagHighlighter, tags } from '@lezer/highlight';
+
+// Effect/field that lets the explorer paint a transient mark on a source
+// range — used to highlight the subtree currently hovered in the tree panel.
+const setExplorerHighlight = StateEffect.define();
+const explorerHighlightField = StateField.define({
+	create() {
+		return Decoration.none;
+	},
+	update(deco, tr) {
+		deco = deco.map(tr.changes);
+		for(const e of tr.effects) {
+			if(e.is(setExplorerHighlight)) {
+				if(e.value === null || e.value.from >= e.value.to) {
+					deco = Decoration.none;
+				} else {
+					deco = Decoration.set([
+						Decoration.mark({ class: 'cm-explorer-hover' }).range(e.value.from, e.value.to)
+					]);
+				}
+			}
+		}
+		return deco;
+	},
+	provide: f => EditorView.decorations.from(f)
+});
 
 const editorView = initValue => new EditorView({
 	parent: document.getElementById('editor-container'),
@@ -19,9 +44,14 @@ const editorView = initValue => new EditorView({
 			EditorView.lineWrapping,
 			EditorView.updateListener.of(view => {
 				if(view.docChanged) {
-					globalThis.bytebeat.sendData({ setFunction: view.state.doc.toString() });
+					const src = view.state.doc.toString();
+					globalThis.bytebeat.sendData({ setFunction: src });
+					if(globalThis.bytebeat.explorer) {
+						globalThis.bytebeat.explorer.onEditorChange(src);
+					}
 				}
 			}),
+			explorerHighlightField,
 			foldGutter(),
 			highlightActiveLine(),
 			highlightSelectionMatches(),
@@ -89,5 +119,17 @@ export class Editor {
 				insert: code
 			}
 		});
+	}
+	setExplorerHighlight(from, to) {
+		if(!this.view) {
+			return;
+		}
+		this.view.dispatch({ effects: setExplorerHighlight.of({ from, to }) });
+	}
+	clearExplorerHighlight() {
+		if(!this.view) {
+			return;
+		}
+		this.view.dispatch({ effects: setExplorerHighlight.of(null) });
 	}
 }

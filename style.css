@@ -1581,3 +1581,18 @@ button[name="close"] {
 	color: var(--ctrl-btn-color);
 	opacity: 0.7;
 }
+
+.cm-explorer-hover {
+	background: rgba(74, 144, 255, 0.25);
+	outline: 1px solid #4af;
+	border-radius: 2px;
+}
+
+.explorer-node {
+	cursor: pointer;
+}
+
+.explorer-node:hover .explorer-node-rect {
+	stroke: #4af;
+	stroke-width: 1.5;
+}

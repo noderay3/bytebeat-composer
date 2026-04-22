@@ -28,6 +28,39 @@ export class Explorer {
 		this.panel = document.getElementById('explorer-panel');
 		this.svg = document.getElementById('explorer-svg');
 		this.empty = document.getElementById('explorer-empty');
+		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
+		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
+	}
+	// Re-parse + re-render on editor changes, but only while the panel is open.
+	// Debounced so rapid typing doesn't churn the SVG.
+	onEditorChange(source) {
+		if(!this.isOpen) {
+			return;
+		}
+		clearTimeout(this._reparseTimer);
+		this._reparseTimer = setTimeout(() => this.render(source), 200);
+	}
+	onSvgMouseOver(e) {
+		const g = e.target.closest('[data-from]');
+		if(!g) {
+			return;
+		}
+		const from = +g.getAttribute('data-from');
+		const to = +g.getAttribute('data-to');
+		const ed = globalThis.bytebeat && globalThis.bytebeat.editor;
+		if(ed) {
+			ed.setExplorerHighlight(from, to);
+		}
+	}
+	onSvgMouseOut(e) {
+		const g = e.target.closest('[data-from]');
+		if(!g) {
+			return;
+		}
+		const ed = globalThis.bytebeat && globalThis.bytebeat.editor;
+		if(ed) {
+			ed.clearExplorerHighlight();
+		}
 	}
 	toggle(source) {
 		this.isOpen ? this.close() : this.open(source);
@@ -115,6 +148,12 @@ export class Explorer {
 			path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
 			this.svg.appendChild(path);
 		}
+		// Wrap rect+text in a <g> carrying data-from/to so a single SVG-level
+		// mouseover handler can map the event to a source range.
+		const g = document.createElementNS(SVG_NS, 'g');
+		g.setAttribute('class', 'explorer-node');
+		g.setAttribute('data-from', String(node.from));
+		g.setAttribute('data-to', String(node.to));
 		const rect = document.createElementNS(SVG_NS, 'rect');
 		rect.setAttribute('class', 'explorer-node-rect' + (node.children.length === 0 ? ' is-leaf' : ''));
 		rect.setAttribute('x', String(node._x));
@@ -123,13 +162,14 @@ export class Explorer {
 		rect.setAttribute('height', String(NODE_HEIGHT));
 		rect.setAttribute('rx', '6');
 		rect.setAttribute('ry', '6');
-		this.svg.appendChild(rect);
+		g.appendChild(rect);
 		const text = document.createElementNS(SVG_NS, 'text');
 		text.setAttribute('class', 'explorer-node-text');
 		text.setAttribute('x', String(node._x + node._w / 2));
 		text.setAttribute('y', String(node._y + NODE_HEIGHT / 2));
 		text.textContent = this.label(node);
-		this.svg.appendChild(text);
+		g.appendChild(text);
+		this.svg.appendChild(g);
 		for(const c of node.children) {
 			this.draw(c);
 		}

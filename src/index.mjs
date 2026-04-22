@@ -181,8 +181,9 @@ globalThis.bytebeat = new class {
 	}
 	initAfterDom() {
 		editor.init();
-		// Expose the explorer on the global so we can iterate from devtools
-		// without rebuilding (e.g. bytebeat.explorer.parse(editor.value)).
+		// Expose editor + explorer on the global. The editor exposure lets the
+		// explorer paint hover-highlight Marks; both also help devtools poking.
+		this.editor = editor;
 		this.explorer = explorer;
 		explorer.initElements();
 		ui.initElements();
