@@ -1,10 +1,12 @@
 import { Editor } from './editor.mjs';
+import { Explorer } from './explorer.mjs';
 import { Library } from './library.mjs';
 import { Scope } from './scope.mjs';
 import { UI } from './ui.mjs';
 import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
 
 const editor = new Editor();
+const explorer = new Explorer();
 const library = new Library();
 const scope = new Scope();
 const ui = new UI();
@@ -177,6 +179,9 @@ globalThis.bytebeat = new class {
 	}
 	initAfterDom() {
 		editor.init();
+		// Expose the explorer on the global so we can iterate from devtools
+		// without rebuilding (e.g. bytebeat.explorer.parse(editor.value)).
+		this.explorer = explorer;
 		ui.initElements();
 		scope.initElements();
 		library.initElements();
