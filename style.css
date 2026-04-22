@@ -1513,11 +1513,23 @@ button[name="close"] {
 	background: var(--ctrl-text-bg);
 	border-right: 1px solid var(--ctrl-btn-border);
 	display: flex;
+	flex-direction: column;
 	align-items: center;
 	justify-content: center;
+	gap: 8px;
 	cursor: pointer;
 	color: var(--ctrl-btn-color);
-	padding: 0;
+	padding: 12px 0;
+}
+
+.explorer-handle-label {
+	writing-mode: vertical-rl;
+	font: bold 11px sans-serif;
+	color: inherit;
+	pointer-events: none;
+	letter-spacing: 0.5px;
+	text-transform: lowercase;
+	white-space: nowrap;
 }
 
 .explorer-handle:hover {

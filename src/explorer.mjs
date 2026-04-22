@@ -113,6 +113,24 @@ export class Explorer {
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
 		this.svg.addEventListener('click', e => this.onSvgClick(e));
+		// The panel sits outside <main id="content"> in the DOM, so the
+		// composer's delegated click handler on #content doesn't see clicks
+		// inside the panel. Bind directly here.
+		this.panel.addEventListener('click', e => this.onPanelClick(e));
+	}
+	onPanelClick(e) {
+		const btn = e.target.closest('button');
+		if(!btn) {
+			return;
+		}
+		switch(btn.id) {
+		case 'explorer-handle':
+			this.toggle(globalThis.bytebeat && globalThis.bytebeat.editor && globalThis.bytebeat.editor.value);
+			break;
+		case 'explorer-solo':
+			this.preSoloSource === null ? this.soloSelected() : this.unsolo();
+			break;
+		}
 	}
 	// Re-parse + re-render on editor changes, but only while the panel is open.
 	// Debounced so rapid typing doesn't churn the SVG.
