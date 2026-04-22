@@ -1596,3 +1596,28 @@ button[name="close"] {
 	stroke: #4af;
 	stroke-width: 1.5;
 }
+
+.explorer-resizer {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 5px;
+	height: 100%;
+	cursor: ew-resize;
+	background: transparent;
+	z-index: 1;
+}
+
+.explorer-resizer:hover {
+	background: var(--ctrl-btn-border);
+}
+
+.explorer-node-rect.is-collapsed {
+	stroke: #4af;
+	stroke-dasharray: 3 2;
+}
+
+#control-explore {
+	font: bold 11px sans-serif;
+	padding: 0 8px;
+}

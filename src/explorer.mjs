@@ -45,9 +45,28 @@ export class Explorer {
 		this.detail = document.getElementById('explorer-detail');
 		this.detailSource = this.detail.querySelector('.explorer-source');
 		this.detailAnnotation = this.detail.querySelector('.explorer-annotation');
+		this.resizer = document.getElementById('explorer-resizer');
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
 		this.svg.addEventListener('click', e => this.onSvgClick(e));
+		if(this.resizer) {
+			this.resizer.addEventListener('mousedown', e => this.startResize(e));
+		}
+	}
+	startResize(e) {
+		e.preventDefault();
+		const startX = e.clientX;
+		const startW = this.panel.getBoundingClientRect().width;
+		const onMove = ev => {
+			const w = Math.max(300, Math.min(window.innerWidth * 0.8, startW - (ev.clientX - startX)));
+			this.panel.style.width = w + 'px';
+		};
+		const onUp = () => {
+			document.removeEventListener('mousemove', onMove);
+			document.removeEventListener('mouseup', onUp);
+		};
+		document.addEventListener('mousemove', onMove);
+		document.addEventListener('mouseup', onUp);
 	}
 	// Re-parse + re-render on editor changes, but only while the panel is open.
 	// Debounced so rapid typing doesn't churn the SVG.
@@ -91,7 +110,26 @@ export class Explorer {
 			return;
 		}
 		this.selectedId = id;
+		// Internal nodes toggle collapse on click; leaves are detail-only.
+		if(node.children.length > 0) {
+			node._collapsed = !node._collapsed;
+			this.relayout();
+		}
 		this.showDetail(node);
+	}
+	relayout() {
+		if(!this.lastTree || !this.svg) {
+			return;
+		}
+		this.svg.replaceChildren();
+		this.measure(this.lastTree);
+		this.position(this.lastTree, 0, 4);
+		const totalW = this.lastTree._sw + 8;
+		const totalH = this.depth(this.lastTree) * (NODE_HEIGHT + LEVEL_GAP) + NODE_HEIGHT + 8;
+		this.svg.setAttribute('width', String(totalW));
+		this.svg.setAttribute('height', String(totalH));
+		this.svg.setAttribute('viewBox', `0 0 ${ totalW } ${ totalH }`);
+		this.draw(this.lastTree);
 	}
 	showDetail(node) {
 		if(!this.detail) {
@@ -205,7 +243,7 @@ export class Explorer {
 	}
 	measure(node) {
 		node._w = Math.max(40, NODE_PADDING + this.label(node).length * CHAR_WIDTH);
-		if(node.children.length === 0) {
+		if(node.children.length === 0 || node._collapsed) {
 			node._sw = node._w;
 			return;
 		}
@@ -220,7 +258,7 @@ export class Explorer {
 	position(node, x, y) {
 		node._x = x + (node._sw - node._w) / 2;
 		node._y = y;
-		if(node.children.length === 0) {
+		if(node.children.length === 0 || node._collapsed) {
 			return;
 		}
 		const total = node.children.reduce((s, c) => s + c._sw, 0)
@@ -232,23 +270,25 @@ export class Explorer {
 		}
 	}
 	depth(node) {
-		if(node.children.length === 0) {
+		if(node.children.length === 0 || node._collapsed) {
 			return 0;
 		}
 		return 1 + Math.max(...node.children.map(c => this.depth(c)));
 	}
 	draw(node) {
-		// Edges first so rects sit on top
-		for(const c of node.children) {
-			const x1 = node._x + node._w / 2;
-			const y1 = node._y + NODE_HEIGHT;
-			const x2 = c._x + c._w / 2;
-			const y2 = c._y;
-			const my = (y1 + y2) / 2;
-			const path = document.createElementNS(SVG_NS, 'path');
-			path.setAttribute('class', 'explorer-edge');
-			path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
-			this.svg.appendChild(path);
+		// Edges first so rects sit on top — skipped for collapsed subtrees.
+		if(!node._collapsed) {
+			for(const c of node.children) {
+				const x1 = node._x + node._w / 2;
+				const y1 = node._y + NODE_HEIGHT;
+				const x2 = c._x + c._w / 2;
+				const y2 = c._y;
+				const my = (y1 + y2) / 2;
+				const path = document.createElementNS(SVG_NS, 'path');
+				path.setAttribute('class', 'explorer-edge');
+				path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
+				this.svg.appendChild(path);
+			}
 		}
 		// Wrap rect+text in a <g> carrying data-from/to + data-id so a single
 		// SVG-level handler can resolve hover/click back to the source range
@@ -259,7 +299,10 @@ export class Explorer {
 		g.setAttribute('data-to', String(node.to));
 		g.setAttribute('data-id', String(node._id));
 		const rect = document.createElementNS(SVG_NS, 'rect');
-		rect.setAttribute('class', 'explorer-node-rect' + (node.children.length === 0 ? ' is-leaf' : ''));
+		const cls = ['explorer-node-rect'];
+		if(node.children.length === 0) cls.push('is-leaf');
+		if(node._collapsed && node.children.length > 0) cls.push('is-collapsed');
+		rect.setAttribute('class', cls.join(' '));
 		rect.setAttribute('x', String(node._x));
 		rect.setAttribute('y', String(node._y));
 		rect.setAttribute('width', String(node._w));
@@ -274,21 +317,26 @@ export class Explorer {
 		text.textContent = this.label(node);
 		g.appendChild(text);
 		this.svg.appendChild(g);
-		for(const c of node.children) {
-			this.draw(c);
+		if(!node._collapsed) {
+			for(const c of node.children) {
+				this.draw(c);
+			}
 		}
 	}
-	// Compact label for a node — what shows inside the rect.
+	// Compact label for a node — what shows inside the rect. Collapsed
+	// internal nodes get a trailing "…" so the suffix is part of the
+	// measured width and the text doesn't overflow the rect.
 	label(node) {
+		const suffix = (node._collapsed && node.children.length > 0) ? ' …' : '';
 		switch(node.kind) {
 		case 'BinaryExpression':
-		case 'UnaryExpression': return node.op;
-		case 'ConditionalExpression': return '?:';
-		case 'CallExpression': return node.op; // already "Math.sin()" etc.
+		case 'UnaryExpression': return node.op + suffix;
+		case 'ConditionalExpression': return '?:' + suffix;
+		case 'CallExpression': return node.op + suffix; // already "Math.sin()" etc.
 		case 'MemberExpression':
-			return node.text.length > 16 ? node.text.slice(0, 14) + '…' : node.text;
+			return (node.text.length > 16 ? node.text.slice(0, 14) + '…' : node.text) + suffix;
 		default:
-			return node.op.length > 16 ? node.op.slice(0, 14) + '…' : node.op;
+			return (node.op.length > 16 ? node.op.slice(0, 14) + '…' : node.op) + suffix;
 		}
 	}
 	// Parse a source string and return our simplified tree, or null if the
