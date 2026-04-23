@@ -142,6 +142,18 @@ export class Explorer {
 		this.annotator = new Annotator();
 		this.byId = new Map();
 		this.selectedId = null;
+		// Viewport transform applied to a <g> inside the SVG. tx/ty in the
+		// SVG's pixel coordinate space; scale is dimensionless.
+		this.tx = 0;
+		this.ty = 0;
+		this.scale = 1;
+		this.minScale = 0.2;
+		this.maxScale = 4;
+		// Natural tree bounds — set by render() and used by fitToView().
+		this.treeW = 0;
+		this.treeH = 0;
+		// Active pan gesture state.
+		this.panning = null;
 		// When a subtree is soloed, the original full source goes here so we
 		// can restore it on Unsolo. null when no solo is active.
 		this.preSoloSource = null;
@@ -163,9 +175,12 @@ export class Explorer {
 		this.detailNumbersRow = this.detailNumbers.parentElement;
 		this.soloBanner = document.getElementById('explorer-solo-banner');
 		this.resizer = document.getElementById('explorer-resizer');
+		this.tree = document.getElementById('explorer-tree');
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
 		this.svg.addEventListener('click', e => this.onSvgClick(e));
+		this.svg.addEventListener('mousedown', e => this.onSvgMouseDown(e));
+		this.svg.addEventListener('wheel', e => this.onSvgWheel(e), { passive: false });
 		// The panel sits outside <main id="content"> in the DOM, so the
 		// composer's delegated click handler on #content doesn't see clicks
 		// inside the panel. Bind directly here.
@@ -174,6 +189,63 @@ export class Explorer {
 			this.resizer.addEventListener('mousedown', e => this.startResize(e));
 		}
 		this.restoreWidth();
+	}
+	// --- Pan / zoom on the tree viewport ---------------------------------
+	applyTransform() {
+		if(this.viewport) {
+			this.viewport.setAttribute('transform',
+				`translate(${ this.tx } ${ this.ty }) scale(${ this.scale })`);
+		}
+	}
+	fitToView() {
+		if(!this.svg || !this.treeW || !this.treeH) return;
+		const rect = this.svg.getBoundingClientRect();
+		if(rect.width <= 0 || rect.height <= 0) return;
+		const padding = 24;
+		const sx = (rect.width - padding * 2) / this.treeW;
+		const sy = (rect.height - padding * 2) / this.treeH;
+		this.scale = Math.max(this.minScale, Math.min(this.maxScale, Math.min(sx, sy, 1)));
+		this.tx = (rect.width - this.treeW * this.scale) / 2;
+		this.ty = (rect.height - this.treeH * this.scale) / 2;
+		this.applyTransform();
+	}
+	onSvgMouseDown(e) {
+		// Left-button drag on empty space pans; over a node, defer to click.
+		if(e.button !== 0) return;
+		if(e.target.closest('[data-id]')) return;
+		e.preventDefault();
+		this.panning = { x: e.clientX, y: e.clientY, startTx: this.tx, startTy: this.ty };
+		this.tree.classList.add('is-panning');
+		const onMove = ev => {
+			if(!this.panning) return;
+			this.tx = this.panning.startTx + (ev.clientX - this.panning.x);
+			this.ty = this.panning.startTy + (ev.clientY - this.panning.y);
+			this.applyTransform();
+		};
+		const onUp = () => {
+			this.panning = null;
+			this.tree.classList.remove('is-panning');
+			document.removeEventListener('mousemove', onMove);
+			document.removeEventListener('mouseup', onUp);
+		};
+		document.addEventListener('mousemove', onMove);
+		document.addEventListener('mouseup', onUp);
+	}
+	onSvgWheel(e) {
+		e.preventDefault();
+		// Smooth multiplicative zoom keyed off scroll delta. ctrlKey is set
+		// for trackpad pinch on macOS — same handler covers both gestures.
+		const factor = Math.exp(-e.deltaY * 0.0015);
+		const next = Math.max(this.minScale, Math.min(this.maxScale, this.scale * factor));
+		if(next === this.scale) return;
+		// Zoom around the cursor: keep the point under the pointer fixed.
+		const rect = this.svg.getBoundingClientRect();
+		const cx = e.clientX - rect.left;
+		const cy = e.clientY - rect.top;
+		this.tx = cx - (cx - this.tx) * (next / this.scale);
+		this.ty = cy - (cy - this.ty) * (next / this.scale);
+		this.scale = next;
+		this.applyTransform();
 	}
 	startResize(e) {
 		e.preventDefault();
@@ -222,6 +294,9 @@ export class Explorer {
 			break;
 		case 'explorer-unsolo':
 			this.unsolo();
+			break;
+		case 'explorer-fit':
+			this.fitToView();
 			break;
 		}
 	}
@@ -403,15 +478,28 @@ export class Explorer {
 		this.position(tree, 0, rootY);
 		const totalW = tree._sw + 16;
 		const totalH = rootY + NODE_HEIGHT + OUTPUT_GAP + NODE_HEIGHT + 8;
-		this.svg.setAttribute('width', String(totalW));
-		this.svg.setAttribute('height', String(totalH));
-		this.svg.setAttribute('viewBox', `0 0 ${ totalW } ${ totalH }`);
+		this.treeW = totalW;
+		this.treeH = totalH;
+		// SVG fills the panel; the viewport <g> inside carries the pan/zoom
+		// transform so the tree's own coordinates stay simple.
+		this.svg.removeAttribute('viewBox');
 		this.defineMarkers();
+		this.viewport = document.createElementNS(SVG_NS, 'g');
+		this.viewport.setAttribute('class', 'explorer-viewport');
+		this.svg.appendChild(this.viewport);
 		this.draw(tree);
 		if(showVoices) {
 			this.drawVoiceLabels(tree);
 		}
 		this.drawOutputNode(tree, totalW);
+		// Auto-fit on first render of a given source; preserve user's zoom
+		// during edit-driven re-renders so typing doesn't snap their view.
+		if(this._lastFittedSource !== source) {
+			this.fitToView();
+			this._lastFittedSource = source;
+		} else {
+			this.applyTransform();
+		}
 	}
 	assignIds(node, counter) {
 		node._id = counter.n++;
@@ -486,7 +574,7 @@ export class Explorer {
 			path.setAttribute('class', 'explorer-edge');
 			path.setAttribute('marker-end', 'url(#explorer-arrow)');
 			path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y2 }`);
-			this.svg.appendChild(path);
+			this.viewport.appendChild(path);
 		}
 		this.drawNode(node);
 		for(const c of node.children) {
@@ -526,7 +614,7 @@ export class Explorer {
 			botText.textContent = bottom;
 			g.appendChild(botText);
 		}
-		this.svg.appendChild(g);
+		this.viewport.appendChild(g);
 	}
 	// Two-line label: top is the operator/value (verbose for combinators —
 	// e.g. "OR ( | )"), bottom is the short annotation when we have one.
@@ -586,7 +674,7 @@ export class Explorer {
 			label.setAttribute('x', String(c._x + c._w / 2));
 			label.setAttribute('y', String(Math.max(LANE_LABEL_HEIGHT - 2, topY - 4)));
 			label.textContent = 'Voice ' + String.fromCharCode(65 + i);
-			this.svg.appendChild(label);
+			this.viewport.appendChild(label);
 		});
 	}
 	subtreeTopY(node) {
@@ -608,7 +696,7 @@ export class Explorer {
 		const x2 = x + w / 2;
 		const my = (y1 + y) / 2;
 		path.setAttribute('d', `M${ x1 } ${ y1 } C ${ x1 } ${ my }, ${ x2 } ${ my }, ${ x2 } ${ y }`);
-		this.svg.appendChild(path);
+		this.viewport.appendChild(path);
 		const g = document.createElementNS(SVG_NS, 'g');
 		g.setAttribute('class', 'explorer-node role-output');
 		const rect = document.createElementNS(SVG_NS, 'rect');
@@ -635,7 +723,7 @@ export class Explorer {
 		bottom.setAttribute('y', String(y + 35));
 		bottom.textContent = desc.detail;
 		g.appendChild(bottom);
-		this.svg.appendChild(g);
+		this.viewport.appendChild(g);
 	}
 	// Parse a source string and return our simplified tree (post-processed
 	// for visualization: associative chains flattened, N*subtree collapsed
