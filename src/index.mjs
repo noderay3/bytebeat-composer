@@ -571,6 +571,11 @@ globalThis.bytebeat = new class {
 		this.mode = mode;
 		this.updateUrl();
 		this.sendData({ mode, setFunction: editor.value });
+		// Refresh the explorer's synthetic output node, which describes
+		// the current mode (8-bit unsigned vs signed vs floatbeat).
+		if(this.explorer && this.explorer.isOpen) {
+			this.explorer.render(editor.value);
+		}
 	}
 	setSampleRate(sampleRate, isSendData = true) {
 		if(!sampleRate || !isFinite(sampleRate) ||
@@ -608,6 +613,11 @@ globalThis.bytebeat = new class {
 			}
 			this.updateUrl();
 			this.sendData(data);
+		}
+		// Refresh the explorer's period / Hz numbers, which depend on
+		// the current sample rate.
+		if(this.explorer && this.explorer.isOpen) {
+			this.explorer.render(editor.value);
 		}
 	}
 	setScale(amount, buttonElem) {

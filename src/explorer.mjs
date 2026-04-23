@@ -88,6 +88,34 @@ function isLeafShape(node) {
 	return false;
 }
 
+// Mode-aware label for the synthetic output node at the bottom of the tree.
+// Reflects how the composer actually interprets the final value per mode.
+function describeOutput(mode, sr) {
+	const rate = sr >= 1000 ? (sr / 1000) + ' kHz' : sr + ' Hz';
+	switch(mode) {
+	case 'Signed Bytebeat':
+		return {
+			title: '8-bit signed sample',
+			detail: '(result & 255) − 128, at ' + rate
+		};
+	case 'Floatbeat':
+		return {
+			title: 'floatbeat sample',
+			detail: 'expected in [−1, 1], at ' + rate
+		};
+	case 'Funcbeat':
+		return {
+			title: 'funcbeat function',
+			detail: 'returned function called per-sample, at ' + rate
+		};
+	default:
+		return {
+			title: '8-bit audio sample',
+			detail: 'result & 255, at ' + rate
+		};
+	}
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const NODE_HEIGHT = 50;        // taller — fits operator + annotation lines
 const NODE_PADDING_X = 16;
@@ -560,7 +588,7 @@ export class Explorer {
 		return Math.min(node._y, ...node.children.map(c => this.subtreeTopY(c)));
 	}
 	drawOutputNode(root, totalW) {
-		const w = 160;
+		const w = 200;
 		const x = root._x + root._w / 2 - w / 2;
 		const y = root._y + NODE_HEIGHT + OUTPUT_GAP;
 		// Edge from root down into the output node
@@ -584,18 +612,20 @@ export class Explorer {
 		rect.setAttribute('rx', '8');
 		rect.setAttribute('ry', '8');
 		g.appendChild(rect);
+		const sr = (globalThis.bytebeat && globalThis.bytebeat.sampleRate) || 8000;
+		const mode = (globalThis.bytebeat && globalThis.bytebeat.mode) || 'Bytebeat';
+		const desc = describeOutput(mode, sr);
 		const top = document.createElementNS(SVG_NS, 'text');
 		top.setAttribute('class', 'explorer-node-top');
 		top.setAttribute('x', String(x + w / 2));
 		top.setAttribute('y', String(y + 18));
-		top.textContent = '8-bit audio sample';
+		top.textContent = desc.title;
 		g.appendChild(top);
 		const bottom = document.createElementNS(SVG_NS, 'text');
 		bottom.setAttribute('class', 'explorer-node-bottom');
 		bottom.setAttribute('x', String(x + w / 2));
 		bottom.setAttribute('y', String(y + 35));
-		const sr = (globalThis.bytebeat && globalThis.bytebeat.sampleRate) || 8000;
-		bottom.textContent = 'result & 255, at ' + (sr >= 1000 ? (sr / 1000) + ' kHz' : sr + ' Hz');
+		bottom.textContent = desc.detail;
 		g.appendChild(bottom);
 		this.svg.appendChild(g);
 	}
