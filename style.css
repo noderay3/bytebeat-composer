@@ -1739,3 +1739,23 @@ button[name="close"] {
 
 .explorer-node.role-mul .explorer-node-top { color: #ffd28a; }
 .explorer-node.role-output .explorer-node-top { color: #c8ffd0; }
+
+.explorer-solo-banner {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 6px 12px;
+	background: rgba(74, 144, 255, 0.18);
+	border-bottom: 1px solid #4af;
+	font: bold 11px sans-serif;
+	color: var(--ctrl-btn-color);
+}
+
+.explorer-solo-banner.hidden {
+	display: none;
+}
+
+#explorer-unsolo {
+	padding: 0 12px;
+	height: 24px;
+}

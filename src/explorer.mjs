@@ -110,6 +110,7 @@ export class Explorer {
 		this.detail = document.getElementById('explorer-detail');
 		this.detailSource = this.detail.querySelector('.explorer-source');
 		this.detailAnnotation = this.detail.querySelector('.explorer-annotation');
+		this.soloBanner = document.getElementById('explorer-solo-banner');
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
 		this.svg.addEventListener('click', e => this.onSvgClick(e));
@@ -128,9 +129,21 @@ export class Explorer {
 			this.toggle(globalThis.bytebeat && globalThis.bytebeat.editor && globalThis.bytebeat.editor.value);
 			break;
 		case 'explorer-solo':
-			this.preSoloSource === null ? this.soloSelected() : this.unsolo();
+			// In-detail Solo always solos the currently selected node
+			// (chains deeper while already soloed). Use the header Unsolo
+			// to restore the original.
+			this.soloSelected();
+			break;
+		case 'explorer-unsolo':
+			this.unsolo();
 			break;
 		}
+	}
+	updateSoloBanner() {
+		if(!this.soloBanner) {
+			return;
+		}
+		this.soloBanner.classList.toggle('hidden', this.preSoloSource === null);
 	}
 	// Re-parse + re-render on editor changes, but only while the panel is open.
 	// Debounced so rapid typing doesn't churn the SVG.
@@ -227,7 +240,7 @@ export class Explorer {
 		}
 		this.soloedNodeText = sub;
 		ed.setValue(sub);
-		this.refreshSoloButton();
+		this.updateSoloBanner();
 	}
 	unsolo() {
 		if(this.preSoloSource === null) {
@@ -241,14 +254,7 @@ export class Explorer {
 		this.preSoloSource = null;
 		this.soloedNodeText = null;
 		ed.setValue(restored);
-		this.refreshSoloButton();
-	}
-	refreshSoloButton() {
-		const btn = document.getElementById('explorer-solo');
-		if(!btn) {
-			return;
-		}
-		btn.textContent = this.preSoloSource === null ? 'Solo' : 'Unsolo';
+		this.updateSoloBanner();
 	}
 	toggle(source) {
 		this.isOpen ? this.close() : this.open(source);
@@ -286,6 +292,7 @@ export class Explorer {
 		if(this.detail) {
 			this.detail.classList.add('hidden');
 		}
+		this.updateSoloBanner();
 		if(!tree) {
 			this.empty.classList.remove('hidden');
 			this.svg.setAttribute('width', '0');
