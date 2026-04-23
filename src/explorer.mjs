@@ -109,8 +109,14 @@ export class Explorer {
 		this.empty = document.getElementById('explorer-empty');
 		this.detail = document.getElementById('explorer-detail');
 		this.detailSource = this.detail.querySelector('.explorer-source');
-		this.detailAnnotation = this.detail.querySelector('.explorer-annotation');
+		this.detailEffect = this.detail.querySelector('.explorer-detail-effect');
+		this.detailEffectRow = this.detailEffect.parentElement;
+		this.detailSound = this.detail.querySelector('.explorer-detail-sound');
+		this.detailSoundRow = this.detailSound.parentElement;
+		this.detailNumbers = this.detail.querySelector('.explorer-detail-numbers');
+		this.detailNumbersRow = this.detailNumbers.parentElement;
 		this.soloBanner = document.getElementById('explorer-solo-banner');
+		this.resizer = document.getElementById('explorer-resizer');
 		this.svg.addEventListener('mouseover', e => this.onSvgMouseOver(e));
 		this.svg.addEventListener('mouseout', e => this.onSvgMouseOut(e));
 		this.svg.addEventListener('click', e => this.onSvgClick(e));
@@ -118,6 +124,40 @@ export class Explorer {
 		// composer's delegated click handler on #content doesn't see clicks
 		// inside the panel. Bind directly here.
 		this.panel.addEventListener('click', e => this.onPanelClick(e));
+		if(this.resizer) {
+			this.resizer.addEventListener('mousedown', e => this.startResize(e));
+		}
+		this.restoreWidth();
+	}
+	startResize(e) {
+		e.preventDefault();
+		const startX = e.clientX;
+		const startW = this.panel.getBoundingClientRect().width;
+		this.panel.classList.add('is-resizing');
+		const onMove = ev => {
+			// Pointer moves left → panel grows wider (panel sits on the right).
+			const w = Math.max(320, Math.min(window.innerWidth - 60, startW - (ev.clientX - startX)));
+			this.panel.style.width = w + 'px';
+		};
+		const onUp = () => {
+			document.removeEventListener('mousemove', onMove);
+			document.removeEventListener('mouseup', onUp);
+			this.panel.classList.remove('is-resizing');
+			try {
+				localStorage.setItem('coderadio.explorer.width',
+					this.panel.getBoundingClientRect().width.toFixed(0));
+			} catch(_) { /* private mode etc. */ }
+		};
+		document.addEventListener('mousemove', onMove);
+		document.addEventListener('mouseup', onUp);
+	}
+	restoreWidth() {
+		try {
+			const v = +localStorage.getItem('coderadio.explorer.width');
+			if(v >= 320 && v <= window.innerWidth - 60) {
+				this.panel.style.width = v + 'px';
+			}
+		} catch(_) { /* ignore */ }
 	}
 	onPanelClick(e) {
 		const btn = e.target.closest('button');
@@ -217,8 +257,13 @@ export class Explorer {
 			isTopOfPlus: this.lastTree && this.lastTree.kind === 'BinaryExpression'
 				&& this.lastTree.op === '+' && this.lastTree.children.includes(node)
 		};
-		this.detailAnnotation.textContent = this.annotator.annotate(node, ctx);
-		this.refreshSoloButton();
+		const d = this.annotator.detail(node, ctx);
+		this.detailEffect.textContent = d.effect;
+		this.detailSound.textContent = d.sound;
+		this.detailNumbers.textContent = d.numbers;
+		this.detailEffectRow.classList.toggle('hidden', !d.effect);
+		this.detailSoundRow.classList.toggle('hidden', !d.sound);
+		this.detailNumbersRow.classList.toggle('hidden', !d.numbers);
 	}
 	soloSelected() {
 		if(this.selectedId == null) {

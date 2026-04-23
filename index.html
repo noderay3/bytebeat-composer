@@ -320,6 +320,7 @@
 			<span class="explorer-handle-label">expression tree</span>
 		</button>
 		<div class="explorer-body">
+			<div id="explorer-resizer" class="explorer-resizer" title="Drag to resize"></div>
 			<div class="explorer-header">
 				<span class="explorer-title">Expression tree</span>
 			</div>
@@ -332,7 +333,9 @@
 			</div>
 			<div id="explorer-detail" class="explorer-detail hidden">
 				<div class="explorer-source"></div>
-				<div class="explorer-annotation"></div>
+				<div class="explorer-detail-row"><div class="explorer-detail-label">Effect</div><div class="explorer-detail-effect"></div></div>
+				<div class="explorer-detail-row"><div class="explorer-detail-label">Sound</div><div class="explorer-detail-sound"></div></div>
+				<div class="explorer-detail-row"><div class="explorer-detail-label">Numbers</div><div class="explorer-detail-numbers"></div></div>
 				<button id="explorer-solo" class="control-button">Solo</button>
 			</div>
 			<div id="explorer-empty" class="explorer-empty hidden">unsupported form — classic expression mode only</div>

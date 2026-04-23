@@ -1492,7 +1492,7 @@ button[name="close"] {
 	box-shadow: -4px 0 12px rgba(0, 0, 0, 0.4);
 	transition: width 160ms ease;
 	width: 560px;
-	max-width: 60vw;
+	max-width: 90vw;
 	border-left: 1px solid var(--ctrl-btn-border);
 }
 
@@ -1758,4 +1758,70 @@ button[name="close"] {
 #explorer-unsolo {
 	padding: 0 12px;
 	height: 24px;
+}
+
+.explorer-resizer {
+	position: absolute;
+	top: 0;
+	left: 22px;          /* sits right next to the chevron handle */
+	width: 6px;
+	height: 100%;
+	cursor: ew-resize;
+	background: transparent;
+	z-index: 2;
+}
+
+.explorer-resizer::after {
+	content: '';
+	position: absolute;
+	top: 50%;
+	left: 1px;
+	width: 4px;
+	height: 60px;
+	margin-top: -30px;
+	border-radius: 2px;
+	background: var(--ctrl-btn-border);
+	opacity: 0.4;
+	transition: opacity 120ms ease;
+}
+
+.explorer-resizer:hover::after {
+	opacity: 1;
+	background: #4af;
+}
+
+#explorer-panel.is-collapsed .explorer-resizer {
+	display: none;
+}
+
+#explorer-panel.is-resizing {
+	transition: none;
+}
+
+.explorer-detail-row {
+	display: flex;
+	gap: 8px;
+	font: 12px sans-serif;
+	color: var(--ctrl-btn-color);
+}
+
+.explorer-detail-row.hidden {
+	display: none;
+}
+
+.explorer-detail-label {
+	flex: 0 0 56px;
+	font-weight: bold;
+	text-transform: uppercase;
+	font-size: 10px;
+	color: var(--ctrl-btn-hover-color);
+	letter-spacing: 0.5px;
+	padding-top: 1px;
+}
+
+.explorer-detail-effect,
+.explorer-detail-sound,
+.explorer-detail-numbers {
+	flex: 1 1 auto;
+	line-height: 1.4;
 }
