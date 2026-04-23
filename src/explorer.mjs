@@ -50,6 +50,9 @@ function nodeRole(node) {
 	if(node.kind === 'BinaryExpression' && node.op === '+') {
 		return 'sum';
 	}
+	if(node.kind === 'FunctionExpression') {
+		return 'func';
+	}
 	return 'op';
 }
 
@@ -543,6 +546,7 @@ export class Explorer {
 		case 'MulConstExpression': return { top: node.op, bottom: ann };
 		case 'SequenceExpression': return { top: 'sequence ( , )', bottom: 'do then return last' };
 		case 'AssignmentExpression': return { top: 'assign ( ' + node.op + ' )', bottom: 'set variable' };
+		case 'FunctionExpression': return { top: node.op, bottom: 'function literal' };
 		case 'MemberExpression':
 			return { top: node.text.length > 18 ? node.text.slice(0, 16) + '…' : node.text, bottom: '' };
 		case 'Number': return { top: node.op, bottom: '' };
@@ -704,8 +708,7 @@ export class Explorer {
 		case 'ArrowFunction':
 		case 'FunctionExpression':
 		case 'FunctionDeclaration':
-			// Function-body / funcbeat forms — out of scope per the spec.
-			return null;
+			return this.buildFunctionExpr(node, src);
 		case '⚠':
 			// Lezer inserts this when the parser can't reconcile the source.
 			// Surface as a marked leaf so the rest of the tree still renders.
@@ -824,6 +827,65 @@ export class Explorer {
 			to: node.to,
 			children: args.filter(Boolean)
 		};
+	}
+	// ArrowFunction / FunctionExpression / FunctionDeclaration — render as a
+	// "λ (params)" wrapper with the body's return expression as its single
+	// child. Block bodies get unwrapped via the ReturnStatement; concise
+	// arrow bodies (`t => expr`) use the expression directly. The function
+	// itself doesn't make sound — its body does, when called from elsewhere.
+	buildFunctionExpr(node, src) {
+		const params = [];
+		let body = null;
+		for(let c = node.firstChild; c; c = c.nextSibling) {
+			if(this.isPunctuation(c)) continue;
+			switch(c.name) {
+			case 'Arrow':       // Lezer's name for the `=>` token
+			case '=>':
+			case 'function':
+			case 'async':
+				continue;
+			case 'ParamList':
+				for(let p = c.firstChild; p; p = p.nextSibling) {
+					if(p.name === 'VariableDefinition') {
+						params.push(src.slice(p.from, p.to));
+					}
+				}
+				continue;
+			case 'VariableDefinition':
+				// Bare arrow param like `t => …` or function name in
+				// `function name(){}`. Treat the first as a param.
+				params.push(src.slice(c.from, c.to));
+				continue;
+			case 'Block':
+			case 'BlockStatement':
+				body = this.extractReturnExpr(c, src);
+				continue;
+			}
+			if(!body) {
+				body = this.build(c, src);
+			}
+		}
+		const paramStr = params.length ? '( ' + params.join(', ') + ' )' : '( )';
+		return {
+			kind: 'FunctionExpression',
+			op: 'λ ' + paramStr,
+			text: src.slice(node.from, node.to),
+			from: node.from,
+			to: node.to,
+			children: body ? [body] : []
+		};
+	}
+	// Walk a block's statements to find the first ReturnStatement and pull
+	// out its expression. Side-effect-only blocks (no return) yield null.
+	extractReturnExpr(blockNode, src) {
+		for(let c = blockNode.firstChild; c; c = c.nextSibling) {
+			if(c.name !== 'ReturnStatement') continue;
+			for(let r = c.firstChild; r; r = r.nextSibling) {
+				if(r.name === 'return' || this.isPunctuation(r)) continue;
+				return this.build(r, src);
+			}
+		}
+		return null;
 	}
 	// Array literal `[1, 2, 3]` — usually a melody / parameter table that
 	// gets indexed below (`tbl[t>>13&15]`). The internals aren't musically

@@ -328,6 +328,11 @@ const KIND_DETAILS = {
 		sound: `On its own, an assignment doesn't make sound — it sets state for later expressions to read. Bytebeats often use a sequence of assignments inside a comma-expression to build up intermediate signals before the final sample.`,
 		numbers: ''
 	}),
+	FunctionExpression: () => ({
+		effect: `Anonymous function literal. Returns the body expression when called with arguments.`,
+		sound: `The function itself doesn't produce sound — it's a recipe. The audio shows up wherever the function is called (look for "name(args)" elsewhere in the expression). Bytebeats use this to factor out a synth voice or a frequency formula and reuse it across multiple notes.`,
+		numbers: ''
+	}),
 	ArrayExpression: n => ({
 		effect: `Constant array literal${ n.arrayCount ? ' with ' + n.arrayCount + ' element' + (n.arrayCount === 1 ? '' : 's') : '' }.`,
 		sound: `Used as a lookup table — typically a melody (`+ `pitches), volume envelope, or rhythm pattern. The array doesn't make sound on its own; it's indexed below by something like \`tbl[t>>13&7]\` to pick one value per slot of time.`,

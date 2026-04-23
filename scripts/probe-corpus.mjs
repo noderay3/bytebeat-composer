@@ -11,7 +11,7 @@ import { Explorer } from '../src/explorer.mjs';
 const HANDLED = new Set([
 	'BinaryExpression', 'UnaryExpression', 'ConditionalExpression',
 	'CallExpression', 'MemberExpression', 'MulConstExpression',
-	'SequenceExpression', 'AssignmentExpression',
+	'SequenceExpression', 'AssignmentExpression', 'FunctionExpression',
 	'ArrayExpression', 'ObjectExpression',
 	'Number', 'Variable', 'String', 'RegExp', 'ParseError'
 ]);
