@@ -212,6 +212,37 @@ globalThis.bytebeat = new class {
 		ui.containerFixed.addEventListener('input', this);
 		ui.containerFixed.addEventListener('keydown', this);
 		ui.containerScroll.addEventListener('mouseover', this);
+		this.setupMediaSession();
+	}
+	// Hook hardware media keys + Control Center / Touch Bar Now Playing.
+	// macOS routes media keys to whichever process owns the active audio
+	// session — that's WebKit for us, so we have to handle them in JS via
+	// the Web MediaSession API rather than relying on the native
+	// MPRemoteCommandCenter wired on the Swift side.
+	setupMediaSession() {
+		if(!('mediaSession' in navigator)) {
+			return;
+		}
+		navigator.mediaSession.setActionHandler('play', () => {
+			this.playbackToggle(true, true);
+			this.postCoderadio('play');
+		});
+		navigator.mediaSession.setActionHandler('pause', () => {
+			this.playbackToggle(false, true);
+			this.postCoderadio('pause');
+		});
+		try {
+			navigator.mediaSession.setActionHandler('nexttrack', () => this.postCoderadio('next'));
+			navigator.mediaSession.setActionHandler('previoustrack', () => this.postCoderadio('previous'));
+		} catch(e) { /* unsupported in older WebKit */ }
+	}
+	// Bridge to CodeRadio's RadioStation. No-op when running in a browser
+	// without the WKScriptMessageHandler registered (e.g. dev preview).
+	postCoderadio(action) {
+		if(globalThis.webkit && globalThis.webkit.messageHandlers
+			&& globalThis.webkit.messageHandlers.coderadio) {
+			globalThis.webkit.messageHandlers.coderadio.postMessage(action);
+		}
 	}
 	async initAudio() {
 		this.audioCtx = new AudioContext({ latencyHint: 'balanced', sampleRate: 48000 });
