@@ -54,13 +54,21 @@ function nodeRole(node) {
 }
 
 // "Leaf-shaped" for visualization purposes: bare literals / variables, and
-// also `t >> N` / `t << N` / `t & literal` — the canonical raw bytebeat
-// inputs that appear as gray boxes in the reference.
+// also `t >> N` / `t << N` — the canonical raw bytebeat inputs that appear
+// as gray boxes in the reference. Plus a few compound forms that read
+// better as one box than as a small subtree (Math.sin, this.foo, arrays).
 function isLeafShape(node) {
 	if(!node) {
 		return false;
 	}
-	if(node.kind === 'Number' || node.kind === 'Variable' || node.kind === 'String') {
+	switch(node.kind) {
+	case 'Number':
+	case 'Variable':
+	case 'String':
+	case 'RegExp':
+	case 'ParseError':
+	case 'ArrayExpression':
+	case 'ObjectExpression':
 		return true;
 	}
 	if(node.kind === 'BinaryExpression' && (node.op === '>>' || node.op === '<<')
@@ -68,6 +76,13 @@ function isLeafShape(node) {
 		&& node.children[0] && node.children[0].kind === 'Variable'
 		&& node.children[0].op === 't'
 		&& node.children[1] && node.children[1].kind === 'Number') {
+		return true;
+	}
+	// Simple property access (Math.PI, this.foo) reads better as one leaf
+	// than as object + property arrows. Index access (`arr[expr]`) keeps its
+	// children so users can drill into the index expression.
+	if(node.kind === 'MemberExpression' && !node.text.includes('[')
+		&& node.text.length <= 24) {
 		return true;
 	}
 	return false;
@@ -642,11 +657,29 @@ export class Explorer {
 		case 'MemberExpression': return this.buildMember(node, src);
 		case 'SequenceExpression': return this.buildSequence(node, src);
 		case 'AssignmentExpression': return this.buildAssignment(node, src);
+		case 'ArrayExpression': return this.buildArray(node, src);
+		case 'ObjectExpression': return this.buildObject(node, src);
+		case 'PostfixExpression': return this.buildUnary(node, src);
+		case 'this':
+			// `this` is a keyword in Lezer's JS grammar — bytebeats use it for
+			// per-instance state (this.foo = …). Treat as a variable for display.
+			return { kind: 'Variable', op: 'this', text: 'this', from, to, children: [] };
+		case 'PropertyName':
+			// Right side of `obj.prop` — Lezer surfaces the bare identifier as
+			// PropertyName. Render as a variable leaf so MemberExpression's two
+			// children don't blow up the renderer.
+			return { kind: 'Variable', op: text, text, from, to, children: [] };
+		case 'RegExp':
+			return { kind: 'RegExp', op: text.length > 24 ? text.slice(0, 22) + '…' : text, text, from, to, children: [] };
 		case 'ArrowFunction':
 		case 'FunctionExpression':
 		case 'FunctionDeclaration':
 			// Function-body / funcbeat forms — out of scope per the spec.
 			return null;
+		case '⚠':
+			// Lezer inserts this when the parser can't reconcile the source.
+			// Surface as a marked leaf so the rest of the tree still renders.
+			return { kind: 'ParseError', op: '⚠ unparsed', text, from, to, children: [] };
 		case 'ParenthesizedExpression': {
 			let inner = node.firstChild;
 			while(inner && this.isPunctuation(inner)) {
@@ -693,14 +726,16 @@ export class Explorer {
 		};
 	}
 	buildUnary(node, src) {
+		// Handles both prefix (-x, ~x, !x) and postfix (x++, x--) — operator
+		// can come before OR after the operand, so don't assume ordering.
 		let op = '', operand = null;
 		for(let c = node.firstChild; c; c = c.nextSibling) {
 			if(this.isPunctuation(c)) {
 				continue;
 			}
-			if(this.isOperator(c) && !operand) {
+			if(this.isOperator(c)) {
 				op = src.slice(c.from, c.to);
-			} else {
+			} else if(!operand) {
 				operand = c;
 			}
 		}
@@ -758,6 +793,44 @@ export class Explorer {
 			from: node.from,
 			to: node.to,
 			children: args.filter(Boolean)
+		};
+	}
+	// Array literal `[1, 2, 3]` — usually a melody / parameter table that
+	// gets indexed below (`tbl[t>>13&15]`). The internals aren't musically
+	// interesting, so render as one leaf with an abbreviated label and full
+	// text in the detail panel.
+	buildArray(node, src) {
+		let count = 0;
+		for(let c = node.firstChild; c; c = c.nextSibling) {
+			if(c.name === '[' || c.name === ']' || c.name === ',') continue;
+			count++;
+		}
+		const text = src.slice(node.from, node.to);
+		const label = count <= 4 && text.length <= 28 ? text : `[ ${ count } values ]`;
+		return {
+			kind: 'ArrayExpression',
+			op: label,
+			text,
+			from: node.from,
+			to: node.to,
+			children: [],
+			arrayCount: count
+		};
+	}
+	buildObject(node, src) {
+		let count = 0;
+		for(let c = node.firstChild; c; c = c.nextSibling) {
+			if(c.name === '{' || c.name === '}' || c.name === ',') continue;
+			count++;
+		}
+		const text = src.slice(node.from, node.to);
+		return {
+			kind: 'ObjectExpression',
+			op: count === 0 ? '{}' : `{ ${ count } props }`,
+			text,
+			from: node.from,
+			to: node.to,
+			children: []
 		};
 	}
 	// SequenceExpression is the JS comma operator: evaluates each child in

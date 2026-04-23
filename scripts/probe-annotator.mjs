@@ -24,7 +24,8 @@ check('t & (t>>13)', null, /slow gate/);
 check('(t>>4) & (t>>5)', null, /beat between slow clocks/);
 check('t ^ (t>>8)', null, /XOR phase/);
 check('t | (t>>7) | (t>>6)', null, /bit-stacked harmonics/);
-check('t * 9', null, /detune by 9|multiplication/); // top expr — falls back if pattern not matched (top filter)
+// After flatten/specialize: `t * 9` becomes MulConstExpression on the t leaf.
+check('t * 9', null, /Multiplies the subtree|gain|×|multiplication|t/);
 check('t % 256', null, /period 256 samples/);
 check('Math.sin(t/100)', null, /function call/);
 check('-(t & 255)', null, /unary|subtraction/);

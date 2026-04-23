@@ -328,6 +328,35 @@ const KIND_DETAILS = {
 		sound: `On its own, an assignment doesn't make sound — it sets state for later expressions to read. Bytebeats often use a sequence of assignments inside a comma-expression to build up intermediate signals before the final sample.`,
 		numbers: ''
 	}),
+	ArrayExpression: n => ({
+		effect: `Constant array literal${ n.arrayCount ? ' with ' + n.arrayCount + ' element' + (n.arrayCount === 1 ? '' : 's') : '' }.`,
+		sound: `Used as a lookup table — typically a melody (`+ `pitches), volume envelope, or rhythm pattern. The array doesn't make sound on its own; it's indexed below by something like \`tbl[t>>13&7]\` to pick one value per slot of time.`,
+		numbers: ''
+	}),
+	ObjectExpression: () => ({
+		effect: `Object literal — a bag of named values.`,
+		sound: `Rare in classic bytebeat. Usually for stashing parameters that other code reads back by name.`,
+		numbers: ''
+	}),
+	MemberExpression: n => ({
+		effect: n.text.includes('[')
+			? `Subscript / array index: looks up an element of the left side at the position computed on the right.`
+			: `Property access: reads the named field of an object (e.g. Math.PI, this.foo).`,
+		sound: n.text.includes('[')
+			? `When the index expression is a slow-counting integer (e.g. (t>>13)&7), this turns a constant table into a melody — one table value per slot.`
+			: ``,
+		numbers: ''
+	}),
+	RegExp: () => ({
+		effect: `Regular expression literal.`,
+		sound: `Bytebeats sometimes embed encoded data inside regexes for byte-saving. The pattern itself isn't audio — surrounding code converts characters to numbers.`,
+		numbers: ''
+	}),
+	ParseError: () => ({
+		effect: `Lezer couldn't parse this region cleanly — usually some non-classic JS construct.`,
+		sound: `Code before/after the marker still runs as JavaScript; the explorer just can't draw structure for this bit.`,
+		numbers: ''
+	}),
 	CallExpression: n => ({
 		effect: `Calls ${ n.op } with the listed arguments. Math functions (Math.sin, Math.floor, etc.) introduce continuous, non-bitwise behavior.`,
 		sound: `Functions like Math.sin produce smooth periodic waveforms — purer tones than bitwise math. Often used in floatbeat code.`,
@@ -439,6 +468,7 @@ function isShiftedT(n) {
 	return isBinOp(n, '>>') && isVar(n.children[0], 't') && isLiteralInt(n.children[1]);
 }
 // True if the subtree only consists of `t`, `t>>N`, and OR/AND combinators.
+// Handles n-ary OR/AND (after Explorer's flatten() collapses associative chains).
 function allShiftedTOrT(n) {
 	if(!n) {
 		return false;
@@ -447,7 +477,7 @@ function allShiftedTOrT(n) {
 		return true;
 	}
 	if(isBinOp(n, '|') || isBinOp(n, '&')) {
-		return n.children.length === 2 && allShiftedTOrT(n.children[0]) && allShiftedTOrT(n.children[1]);
+		return n.children.length >= 2 && n.children.every(allShiftedTOrT);
 	}
 	return false;
 }
