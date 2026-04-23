@@ -296,7 +296,9 @@ export class Explorer {
 			return;
 		}
 		this.detail.classList.remove('hidden');
-		this.detailSource.textContent = node.text;
+		this.detailSource.textContent = node._inlined && node._inlinedFrom
+			? `${ node._inlinedFrom }   ⟶ expanded ⟶   ${ node.text }`
+			: node.text;
 		const ctx = {
 			sampleRate: (globalThis.bytebeat && globalThis.bytebeat.sampleRate) || 8000,
 			isTop: node === this.lastTree,
@@ -495,7 +497,9 @@ export class Explorer {
 		const role = nodeRole(node);
 		const { top, bottom } = this.labels(node);
 		const g = document.createElementNS(SVG_NS, 'g');
-		g.setAttribute('class', `explorer-node role-${ role }`);
+		const cls = ['explorer-node', `role-${ role }`];
+		if(node._inlined) cls.push('is-inlined');
+		g.setAttribute('class', cls.join(' '));
 		g.setAttribute('data-from', String(node.from));
 		g.setAttribute('data-to', String(node.to));
 		g.setAttribute('data-id', String(node._id));
@@ -642,7 +646,8 @@ export class Explorer {
 		const tree = javascriptLanguage.parser.parse(source);
 		const root = this.descend(tree.topNode);
 		const raw = root ? this.build(root, source) : null;
-		this.lastTree = raw ? specialize(flatten(raw)) : null;
+		const shaped = raw ? specialize(flatten(raw)) : null;
+		this.lastTree = shaped ? inline(shaped) : null;
 		return this.lastTree;
 	}
 	// Skip past Script / ExpressionStatement / ParenthesizedExpression wrappers
@@ -810,6 +815,7 @@ export class Explorer {
 			}
 		}
 		const calleeText = callee ? src.slice(callee.from, callee.to) : '';
+		const calleeNode = callee ? this.build(callee, src) : null;
 		const args = [];
 		if(argList) {
 			for(let c = argList.firstChild; c; c = c.nextSibling) {
@@ -825,6 +831,7 @@ export class Explorer {
 			text: src.slice(node.from, node.to),
 			from: node.from,
 			to: node.to,
+			callee: calleeNode,   // structured callee for inline()
 			children: args.filter(Boolean)
 		};
 	}
@@ -872,6 +879,7 @@ export class Explorer {
 			text: src.slice(node.from, node.to),
 			from: node.from,
 			to: node.to,
+			params,            // structured for inline()
 			children: body ? [body] : []
 		};
 	}
@@ -1043,6 +1051,116 @@ function flatten(node) {
 	}
 	if(node.children) {
 		return Object.assign({}, node, { children: node.children.map(flatten) });
+	}
+	return node;
+}
+
+// Walk the simplified tree, find named-helper assignments inside
+// SequenceExpressions (`f = (x) => body, …, f(arg)`) and inline-IIFEs
+// (`function(x){return body}(arg)` / `((x) => body)(arg)`), and substitute
+// arguments into the body at every call site so the user can see the actual
+// per-sample computation rather than an opaque `f(t)` leaf.
+//
+// Inlined nodes get `_inlined: true` so the renderer can mark them
+// visually and the detail panel can mention "expanded from f(t)".
+const MAX_INLINE_DEPTH = 4;
+function inline(node, scope = new Map(), depth = 0) {
+	if(!node) return node;
+	// Sequence introduces a scope: pre-scan its children for helper bindings
+	// (assign of variable to function), then expand children with that scope.
+	if(node.kind === 'SequenceExpression') {
+		const inner = new Map(scope);
+		for(const c of node.children) {
+			collectBinding(c, inner);
+		}
+		return Object.assign({}, node, {
+			children: node.children.map(c => inline(c, inner, depth))
+		});
+	}
+	if(node.kind === 'CallExpression') {
+		const expandedArgs = node.children.map(c => inline(c, scope, depth));
+		const expanded = expandCall(node, expandedArgs, scope, depth);
+		if(expanded) return expanded;
+		return Object.assign({}, node, {
+			children: expandedArgs,
+			callee: node.callee ? inline(node.callee, scope, depth) : null
+		});
+	}
+	if(node.children && node.children.length) {
+		return Object.assign({}, node, {
+			children: node.children.map(c => inline(c, scope, depth))
+		});
+	}
+	return node;
+}
+function collectBinding(child, scope) {
+	if(child && child.kind === 'AssignmentExpression'
+		&& child.children.length === 2
+		&& child.children[0] && child.children[0].kind === 'Variable'
+		&& child.children[1] && child.children[1].kind === 'FunctionExpression'
+		&& child.children[1].children.length === 1) {
+		const name = child.children[0].op;
+		const fn = child.children[1];
+		if(fn.params) {  // arity zero is fine — `f = () => 5` still inlines
+			scope.set(name, { params: fn.params, body: fn.children[0] });
+		}
+	}
+}
+// Returns a substituted body if the call can be expanded, else null.
+function expandCall(callNode, args, scope, depth) {
+	if(depth >= MAX_INLINE_DEPTH || !callNode.callee) return null;
+	let target = null;
+	let params = null;
+	const callee = callNode.callee;
+	if(callee.kind === 'Variable') {
+		const fn = scope.get(callee.op);
+		if(fn) { target = fn.body; params = fn.params; }
+	} else if(callee.kind === 'FunctionExpression'
+		&& callee.children.length === 1
+		&& callee.params) {
+		// IIFE — inline the function body directly.
+		target = callee.children[0];
+		params = callee.params;
+	}
+	if(!target || !params || params.length !== args.length) return null;
+	const paramMap = new Map();
+	for(let i = 0; i < params.length; i++) paramMap.set(params[i], args[i]);
+	const substituted = substitute(deepCopy(target), paramMap, callNode);
+	const expanded = inline(substituted, scope, depth + 1);
+	if(expanded) {
+		expanded._inlined = true;
+		expanded._inlinedFrom = callNode.text;
+	}
+	return expanded;
+}
+// Deep-copy node tree so substitution doesn't mutate the function body
+// (which may be re-used across multiple call sites).
+function deepCopy(node) {
+	if(!node) return node;
+	const copy = Object.assign({}, node);
+	if(node.children) copy.children = node.children.map(deepCopy);
+	if(node.callee) copy.callee = deepCopy(node.callee);
+	return copy;
+}
+function substitute(node, paramMap, callSite) {
+	if(!node) return node;
+	if(node.kind === 'Variable' && paramMap.has(node.op)) {
+		const arg = paramMap.get(node.op);
+		// Anchor the substituted subtree's source range to the call site so
+		// hover-highlight in the editor lights up the call, not the original
+		// param reference inside the function body.
+		const stamp = Object.assign({}, arg);
+		if(callSite) {
+			stamp.from = callSite.from;
+			stamp.to = callSite.to;
+		}
+		return stamp;
+	}
+	if(node.children) {
+		node.children = node.children.map(c => substitute(c, paramMap, callSite));
+	}
+	if(node.callee) {
+		node.callee = substitute(node.callee, paramMap, callSite);
 	}
 	return node;
 }

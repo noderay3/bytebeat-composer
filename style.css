@@ -1830,3 +1830,8 @@ button[name="close"] {
 	fill: #382a4d;
 	stroke: #9d7ed4;
 }
+
+.explorer-node.is-inlined .explorer-node-rect {
+	stroke-dasharray: 4 2;
+	stroke-width: 1.5;
+}
