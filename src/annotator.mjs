@@ -318,6 +318,16 @@ const KIND_DETAILS = {
 		sound: `Branches between two signals based on a condition. Lets you stitch sections together by time (e.g., t < 8000 ? sectionA : sectionB).`,
 		numbers: ''
 	}),
+	SequenceExpression: () => ({
+		effect: `Comma operator: evaluates each child left-to-right and yields the last one's value.`,
+		sound: `Each step before the last is here for side-effects (typically variable assignments). Only the final expression contributes to the audio sample. Useful for stashing intermediate values into variables that the final expression reads back.`,
+		numbers: ''
+	}),
+	AssignmentExpression: n => ({
+		effect: `Stores the right-hand value into the left-hand name (using "${ n.op }"). The expression itself yields the value that was stored, so it can be embedded inside larger expressions.`,
+		sound: `On its own, an assignment doesn't make sound — it sets state for later expressions to read. Bytebeats often use a sequence of assignments inside a comma-expression to build up intermediate signals before the final sample.`,
+		numbers: ''
+	}),
 	CallExpression: n => ({
 		effect: `Calls ${ n.op } with the listed arguments. Math functions (Math.sin, Math.floor, etc.) introduce continuous, non-bitwise behavior.`,
 		sound: `Functions like Math.sin produce smooth periodic waveforms — purer tones than bitwise math. Often used in floatbeat code.`,

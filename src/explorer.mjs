@@ -498,6 +498,8 @@ export class Explorer {
 		case 'ConditionalExpression': return { top: '? :', bottom: 'if/else' };
 		case 'CallExpression': return { top: node.op, bottom: ann };
 		case 'MulConstExpression': return { top: node.op, bottom: ann };
+		case 'SequenceExpression': return { top: 'sequence ( , )', bottom: 'do then return last' };
+		case 'AssignmentExpression': return { top: 'assign ( ' + node.op + ' )', bottom: 'set variable' };
 		case 'MemberExpression':
 			return { top: node.text.length > 18 ? node.text.slice(0, 16) + '…' : node.text, bottom: '' };
 		case 'Number': return { top: node.op, bottom: '' };
@@ -638,6 +640,13 @@ export class Explorer {
 		case 'ConditionalExpression': return this.buildConditional(node, src);
 		case 'CallExpression': return this.buildCall(node, src);
 		case 'MemberExpression': return this.buildMember(node, src);
+		case 'SequenceExpression': return this.buildSequence(node, src);
+		case 'AssignmentExpression': return this.buildAssignment(node, src);
+		case 'ArrowFunction':
+		case 'FunctionExpression':
+		case 'FunctionDeclaration':
+			// Function-body / funcbeat forms — out of scope per the spec.
+			return null;
 		case 'ParenthesizedExpression': {
 			let inner = node.firstChild;
 			while(inner && this.isPunctuation(inner)) {
@@ -750,6 +759,65 @@ export class Explorer {
 			to: node.to,
 			children: args.filter(Boolean)
 		};
+	}
+	// SequenceExpression is the JS comma operator: evaluates each child in
+	// order and yields the last one's value. In bytebeat it shows up as
+	// `(a = foo, b = bar, finalSample)` — assignments + a final result.
+	buildSequence(node, src) {
+		const exprs = [];
+		for(let c = node.firstChild; c; c = c.nextSibling) {
+			if(this.isPunctuation(c)) {
+				continue;
+			}
+			const built = this.build(c, src);
+			if(built) {
+				exprs.push(built);
+			}
+		}
+		return {
+			kind: 'SequenceExpression',
+			op: ',',
+			text: src.slice(node.from, node.to),
+			from: node.from,
+			to: node.to,
+			children: exprs
+		};
+	}
+	// AssignmentExpression: `name = value` (or `+=` / `*=` / etc.). Value is
+	// evaluated and stored; the expression itself yields the assigned value.
+	buildAssignment(node, src) {
+		let left = null, op = '=', right = null;
+		for(let c = node.firstChild; c; c = c.nextSibling) {
+			if(this.isPunctuation(c)) {
+				continue;
+			}
+			if(this.isAssignmentOp(c)) {
+				op = src.slice(c.from, c.to);
+			} else if(!left) {
+				left = c;
+			} else {
+				right = c;
+			}
+		}
+		const children = [];
+		if(left) children.push(this.build(left, src));
+		if(right) children.push(this.build(right, src));
+		return {
+			kind: 'AssignmentExpression',
+			op,
+			text: src.slice(node.from, node.to),
+			from: node.from,
+			to: node.to,
+			children: children.filter(Boolean)
+		};
+	}
+	isAssignmentOp(node) {
+		switch(node.name) {
+		case '=':
+		case 'AssignmentOp':
+			return true;
+		}
+		return false;
 	}
 	buildMember(node, src) {
 		// children: <object> . <property>   or   <object> [ <expr> ]
