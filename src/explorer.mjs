@@ -485,6 +485,13 @@ export class Explorer {
 		this._liveFn = inst.fn;
 		this._liveNodes = inst.nodes;
 		this._liveBuffers = inst.nodes.map(() => ({ cur: 0 }));
+		// Anchor: capture the current sample position and wall-clock time.
+		// We advance t from elapsed wall time so the colors move smoothly
+		// at 60fps regardless of the audio worklet's message rate (~10 Hz).
+		const sampleNow = this._readCurrentSample();
+		this._liveStartT = sampleNow >= 0 ? sampleNow : 0;
+		this._liveStartWall = performance.now();
+		this._liveWasPlaying = !!(globalThis.bytebeat && globalThis.bytebeat.isPlaying);
 		this.refreshLiveToggle();
 		this._liveRaf = requestAnimationFrame(() => this._tickLive());
 	}
@@ -505,8 +512,26 @@ export class Explorer {
 	_tickLive() {
 		if(!this.isLive) return;
 		this._liveRaf = requestAnimationFrame(() => this._tickLive());
-		const t = this._readCurrentSample();
-		if(t < 0) return;
+		const bb = globalThis.bytebeat;
+		const isPlaying = !!(bb && bb.isPlaying);
+		const sr = (bb && bb.sampleRate) || 8000;
+		let t;
+		if(isPlaying) {
+			// Advance t from elapsed wall time for smooth 60fps color drift.
+			// Only use the anchored start — if playback restarted, re-anchor.
+			t = this._liveStartT + Math.round((performance.now() - this._liveStartWall) / 1000 * sr);
+		} else {
+			// Use the worklet's last-known position when paused.
+			t = this._readCurrentSample();
+			if(t < 0) return;
+		}
+		// Re-anchor when playback resumes so t doesn't jump.
+		if(isPlaying && !this._liveWasPlaying) {
+			const snap = this._readCurrentSample();
+			if(snap >= 0) { this._liveStartT = snap; this._liveStartWall = performance.now(); }
+			t = this._liveStartT;
+		}
+		this._liveWasPlaying = isPlaying;
 		if(!this._liveFn || !this._liveBuffers) return;
 		const values = new Uint32Array(this._liveBuffers.length);
 		try { this._liveFn(t, values); } catch(_) { return; }
@@ -518,7 +543,6 @@ export class Explorer {
 	_readCurrentSample() {
 		const bb = globalThis.bytebeat;
 		if(bb && typeof bb.byteSample === 'number') return bb.byteSample | 0;
-		// Fallback: parse the counter display
 		const el = document.getElementById('control-counter');
 		if(!el) return -1;
 		const v = parseFloat(el.value);
