@@ -1,5 +1,6 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript';
 import { Annotator } from './annotator.mjs';
+import { instrument } from './instrumenter.mjs';
 import { serialize } from './serializer.mjs';
 
 // Lezer node types we treat as transparent — descend through them without
@@ -119,6 +120,21 @@ function describeOutput(mode, sr) {
 	}
 }
 
+function valueToHSL(raw, mode) {
+	let norm;
+	switch(mode) {
+	case 'Signed Bytebeat': norm = (raw + 128) / 255; break;
+	case 'Floatbeat': norm = (raw + 1) / 2; break;
+	default: norm = raw / 255;
+	}
+	norm = Math.max(0, Math.min(1, norm));
+	// 0 = silence/cold (blue), 1 = loud/hot (red). Dark bg so lightness stays low.
+	const h = 220 - norm * 220;
+	const s = 50 + norm * 40;
+	const l = 7 + norm * 20;
+	return `hsl(${ h.toFixed(0) }, ${ s.toFixed(0) }%, ${ l.toFixed(0) }%)`;
+}
+
 const SVG_NS = 'http://www.w3.org/2000/svg';
 const NODE_HEIGHT = 50;        // taller — fits operator + annotation lines
 const NODE_PADDING_X = 16;
@@ -154,6 +170,14 @@ export class Explorer {
 		this.treeH = 0;
 		// Active pan gesture state.
 		this.panning = null;
+		// Live monitor: re-evaluates every subtree at the current sample
+		// position and color-codes the node rects so you can SEE the
+		// computation breathing in real time.
+		this.isLive = false;
+		this._liveRaf = 0;
+		this._liveBuffers = null;
+		this._liveNodes = null;
+		this._liveFn = null;
 		// When a subtree is soloed, the original full source goes here so we
 		// can restore it on Unsolo. null when no solo is active.
 		this.preSoloSource = null;
@@ -298,6 +322,9 @@ export class Explorer {
 			break;
 		case 'explorer-fit':
 			this.fitToView();
+			break;
+		case 'explorer-live':
+			this.toggleLive();
 			break;
 		}
 	}
@@ -446,6 +473,77 @@ export class Explorer {
 		this.waveform.appendChild(svg);
 		this.waveform.classList.remove('hidden');
 	}
+	// --- Live monitor: rAF-driven per-node evaluation --------------------
+	toggleLive() {
+		this.isLive ? this.stopLive() : this.startLive();
+	}
+	startLive() {
+		if(!this.lastTree) return;
+		const inst = instrument(this.lastTree);
+		if(inst.count === 0) return;
+		this.isLive = true;
+		this._liveFn = inst.fn;
+		this._liveNodes = inst.nodes;
+		this._liveBuffers = inst.nodes.map(() => ({ cur: 0 }));
+		this.refreshLiveToggle();
+		this._liveRaf = requestAnimationFrame(() => this._tickLive());
+	}
+	stopLive() {
+		this.isLive = false;
+		this.refreshLiveToggle();
+		if(this._liveRaf) {
+			cancelAnimationFrame(this._liveRaf);
+			this._liveRaf = 0;
+		}
+		// Reset every node rect fill to its static role color.
+		if(this.viewport) {
+			this.viewport.querySelectorAll('.explorer-node-rect').forEach(r => {
+				r.removeAttribute('style');
+			});
+		}
+	}
+	_tickLive() {
+		if(!this.isLive) return;
+		this._liveRaf = requestAnimationFrame(() => this._tickLive());
+		const t = this._readCurrentSample();
+		if(t < 0) return;
+		if(!this._liveFn || !this._liveBuffers) return;
+		const values = new Uint32Array(this._liveBuffers.length);
+		try { this._liveFn(t, values); } catch(_) { return; }
+		for(let i = 0; i < values.length; i++) {
+			this._liveBuffers[i].cur = values[i];
+		}
+		this._applyLiveColors(values);
+	}
+	_readCurrentSample() {
+		const bb = globalThis.bytebeat;
+		if(bb && typeof bb.byteSample === 'number') return bb.byteSample | 0;
+		// Fallback: parse the counter display
+		const el = document.getElementById('control-counter');
+		if(!el) return -1;
+		const v = parseFloat(el.value);
+		return isFinite(v) ? Math.round(v) : -1;
+	}
+	_applyLiveColors(values) {
+		if(!this.viewport) return;
+		const mode = (globalThis.bytebeat && globalThis.bytebeat.mode) || 'Bytebeat';
+		const gs = this.viewport.querySelectorAll('.explorer-node');
+		// Batch update: iterate g elements, match to live node by data-id
+		for(const g of gs) {
+			const id = +g.getAttribute('data-id');
+			if(isNaN(id)) continue;
+			const node = this.byId.get(id);
+			if(!node || node._liveId == null || node._liveId >= values.length) continue;
+			const v = values[node._liveId];
+			const rect = g.querySelector('.explorer-node-rect');
+			if(!rect) continue;
+			rect.setAttribute('style', `fill: ${ valueToHSL(v, mode) };`);
+		}
+	}
+	refreshLiveToggle() {
+		const btn = document.getElementById('explorer-live');
+		if(btn) btn.classList.toggle('is-active', this.isLive);
+	}
 	soloSelected() {
 		if(this.selectedId == null) {
 			return;
@@ -496,6 +594,7 @@ export class Explorer {
 	}
 	close() {
 		this.isOpen = false;
+		this.stopLive();
 		if(this.panel) {
 			this.panel.classList.add('is-collapsed');
 			this.updateHandleTitle();
@@ -557,6 +656,12 @@ export class Explorer {
 			this._lastFittedSource = source;
 		} else {
 			this.applyTransform();
+		}
+		// Re-instrument for live mode when the tree changes (e.g., after solo,
+		// inline expansion, or edit-driven re-parse).
+		if(this.isLive) {
+			this.stopLive();
+			this.startLive();
 		}
 	}
 	assignIds(node, counter) {
