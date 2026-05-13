@@ -1853,3 +1853,45 @@ button[name="close"] {
 	stroke-dasharray: 4 2;
 	stroke-width: 1.5;
 }
+
+.explorer-waveform {
+	padding: 4px 0;
+	text-align: center;
+}
+
+.explorer-waveform-svg {
+	border-radius: 4px;
+	background: var(--ctrl-text-bg);
+}
+
+.label-effect   { color: #7eb8ff; }
+.label-sound    { color: #8ae09e; }
+.label-numbers  { color: #e0c26a; }
+
+.explorer-detail-row {
+	display: flex;
+	gap: 8px;
+	font: 12px sans-serif;
+	color: var(--ctrl-btn-color);
+	margin-top: 2px;
+}
+
+.explorer-detail-row.hidden {
+	display: none;
+}
+
+.explorer-detail-label {
+	flex: 0 0 62px;
+	font-weight: 600;
+	font-size: 9.5px;
+	letter-spacing: 0.6px;
+	padding-top: 1px;
+}
+
+.explorer-detail-effect,
+.explorer-detail-sound,
+.explorer-detail-numbers {
+	flex: 1 1 auto;
+	line-height: 1.45;
+	font-size: 11.5px;
+}

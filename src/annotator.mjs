@@ -143,11 +143,10 @@ const SHORT_BY_KIND = {
 	Variable: n => n.op === 't' ? 'sample index' : ''
 };
 
-// Long-form explanation for the detail panel. Returns three short
-// paragraphs: what the operator does at a code level (`effect`), how
-// that translates to sound (`sound`), and concrete numbers at the
-// current sample rate (`numbers`). Empty strings are skipped by the
-// renderer. New patterns: prefer adding here over the terse table.
+// Detail panel text — three per-node paragraphs. Written to be concrete
+// and visual: "what does this do → what does it sound like → numbers."
+// The mini-waveform in the detail panel does the visual heavy lifting;
+// these paragraphs provide the mental model.
 const DETAIL_PATTERNS = [
 	{
 		match: n => isBinOp(n, '>>') && isVar(n.children[0], 't') && isLiteralInt(n.children[1]),
@@ -156,9 +155,9 @@ const DETAIL_PATTERNS = [
 			const period = Math.pow(2, N) / Math.max(ctx.sampleRate, 1);
 			const freq = 1 / period;
 			return {
-				effect: `Right-shifts t by ${ N } bits — drops the lowest ${ N } bits and exposes the slow ones to the bottom. The value only changes once every 2^${ N } = ${ Math.pow(2, N) } samples.`,
-				sound: `t alone counts so fast its low bits sound like noise. Shifting it down turns it into a slow sawtooth — useful as an LFO, clock, or sub-bass.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: one cycle every ${ formatTime(period) }, ≈ ${ freq.toFixed(2) } Hz.`
+				effect: `Divides t by ${ Math.pow(2, N).toLocaleString() } — keeps only the slow-changing high bits of the counter.`,
+				sound: `A slow stair-step: the value sits still for thousands of samples, then ticks once. Used as a clock pulse, rhythm divider, or sub-bass foundation.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: ticks ≈ ${ freq.toFixed(2) }× per second — ${ freq < 20 ? 'felt as a pulsing rhythm, not heard as a tone' : pitchHint(freq) }.`
 			};
 		}
 	},
@@ -167,9 +166,9 @@ const DETAIL_PATTERNS = [
 		make: (n, ctx) => {
 			const N = parseLiteral(n.children[1].op);
 			return {
-				effect: `Left-shifts t by ${ N } bits — multiplies by 2^${ N } = ${ Math.pow(2, N) }, with low bits filling in as zeros.`,
-				sound: `Same waveform as plain t but ticking ${ Math.pow(2, N) }× as fast — audible content moves up by ${ N } octaves.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: every bit-flip from t now happens 2^${ N } times more often.`
+				effect: `Multiplies t by ${ Math.pow(2, N).toLocaleString() } — the waveform is the same shape as t, just ${ Math.pow(2, N) }× faster.`,
+				sound: `Pitched up ${ N } octaves. Bits that were sub-audible (slow) in t now land in the audible range.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: every feature in t happens ${ Math.pow(2, N) }× more frequently.`
 			};
 		}
 	},
@@ -180,9 +179,9 @@ const DETAIL_PATTERNS = [
 			const N = parseLiteral(n.children[1].op) + 1;
 			const freq = ctx.sampleRate / N;
 			return {
-				effect: `Keeps only the low log2(${ N }) bits of t — t now counts 0…${ N - 1 } then wraps.`,
-				sound: `A pure rising-then-snapping sawtooth wave. The fundamental tone is the wrap rate; harmonics fill in the timbre.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: wraps ${ freq.toFixed(2) } times per second → fundamental ≈ ${ freq.toFixed(2) } Hz (${ pitchHint(freq) }).`
+				effect: `Wraps t to the range 0…${ N - 1 }. Every ${ N } samples the counter resets to zero — creating a sawtooth ramp.`,
+				sound: `A bright, buzzy sawtooth wave — the most common building block in bytebeat melody. The faster the wrap, the higher the pitch.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: wraps ${ freq.toFixed(0) }× per second → fundamental ≈ ${ freq.toFixed(1) } Hz (${ pitchHint(freq) }).`
 			};
 		}
 	},
@@ -192,9 +191,9 @@ const DETAIL_PATTERNS = [
 			const N = parseLiteral(n.children[1].children[1].op);
 			const period = Math.pow(2, N) / Math.max(ctx.sampleRate, 1);
 			return {
-				effect: `Bitwise AND of fast t with a slowly counting copy of itself (t shifted right by ${ N }). A bit comes through only if both sides have a 1 there.`,
-				sound: `The slow side acts like a stuttering gate on the audio-rate t — bursts of high-frequency content interrupted by gaps. Many "rhythmic" bytebeats live in this shape.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: the gating side toggles every ≈ ${ formatTime(period) }, giving a ≈ ${ (1 / period).toFixed(2) } Hz rhythmic envelope on top of the audio.`
+				effect: `Uses a slow copy of t (shifted right by ${ N }) as an on/off switch. Audio-rate t only passes through when the slow gate's bit is 1.`,
+				sound: `A stuttering, rhythmic pulse — bursts of audio separated by silence. The gate opens ~${ (1 / period).toFixed(1) }× per second, creating a "chop" effect.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: gate opens every ≈ ${ formatTime(period) }, producing ${ (1 / period).toFixed(2) } Hz pulses on the carrier.`
 			};
 		}
 	},
@@ -204,9 +203,9 @@ const DETAIL_PATTERNS = [
 			const a = parseLiteral(n.children[0].children[1].op);
 			const b = parseLiteral(n.children[1].children[1].op);
 			return {
-				effect: `AND of two slow clocks (t shifted by ${ a } and ${ b }). The result is 1 only when both clocks are simultaneously 1.`,
-				sound: `Two slow square-ish counters interfere — you get a polyrhythmic on/off pattern at the beat between them. Sounds like a percussive cross-rhythm.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: ≈ ${ (ctx.sampleRate / Math.pow(2, a)).toFixed(2) } Hz × ≈ ${ (ctx.sampleRate / Math.pow(2, b)).toFixed(2) } Hz interaction.`
+				effect: `ANDs two slow clocks together — like two metronomes that only click when they coincide. Both must be 1 for the output to be 1.`,
+				sound: `A sparse, percussive cross-rhythm. Hits land only on shared beats; every other moment is silence. Used for drum-like patterns.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: ≈ ${ (ctx.sampleRate / Math.pow(2, a)).toFixed(1) } Hz × ${ (ctx.sampleRate / Math.pow(2, b)).toFixed(1) } Hz interplay.`
 			};
 		}
 	},
@@ -215,17 +214,17 @@ const DETAIL_PATTERNS = [
 		make: (n, ctx) => {
 			const N = parseLiteral(n.children[1].children[1].op);
 			return {
-				effect: `XOR of t with t>>${ N }: bits flip in t wherever the slow copy has a 1.`,
-				sound: `Periodically inverts groups of bits — the timbre morphs as the slow side counts up. Often produces tonal shifts and arpeggios.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: the inverter pattern advances once every ${ formatTime(Math.pow(2, N) / ctx.sampleRate) }.`
+				effect: `Flips groups of bits in t wherever the slow copy (shifted right by ${ N }) has a 1. Like toggling bit-columns at a fixed rhythm.`,
+				sound: `A morphing, phase-shifting timbre. As the slow clock advances, different bit-groups toggle, creating tonal ripples that sweep across the spectrum.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: the inversion pattern shifts every ${ formatTime(Math.pow(2, N) / ctx.sampleRate) }.`
 			};
 		}
 	},
 	{
 		match: n => isBinOp(n, '|') && allShiftedTOrT(n) && countTLeaves(n) >= 3,
-		make: () => ({
-			effect: `OR of several shifted t copies. A bit is 1 in the result if it's 1 in any of the inputs.`,
-			sound: `Stacks waveforms at related frequencies — each shifted t is one octave lower than the previous. Bits "layer" rather than mix linearly, giving a buzzy, organ-like timbre.`,
+		make: n => ({
+			effect: `ORs together ${ countTLeaves(n) } copies of t at different speeds. Each copy's 1-bits pile on independently — they never cancel, only add.`,
+			sound: `A thick, organ-like timbre — multiple octaves of the same waveform stacked. Each shifted copy contributes one octave's worth of harmonic weight.`,
 			numbers: ''
 		})
 	},
@@ -235,9 +234,9 @@ const DETAIL_PATTERNS = [
 			const N = parseLiteral(n.children[1].op);
 			const freq = ctx.sampleRate / N;
 			return {
-				effect: `t modulo ${ N } — counts 0…${ N - 1 } then wraps. Same shape as t & (${ N - 1 }) when N is a power of 2.`,
-				sound: `Sawtooth wave at the wrap rate.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: ≈ ${ freq.toFixed(2) } Hz (${ pitchHint(freq) }).`
+				effect: `Wraps t to 0 every ${ N } samples — equivalent to t & ${ N - 1 } when ${ N } is a power of 2, but works for any modulus.`,
+				sound: `A sawtooth wave. Slower wraps = lower pitch; faster = higher. At this modulus, the fundamental ≈ ${ freq.toFixed(0) } Hz.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: ≈ ${ freq.toFixed(1) } Hz (${ pitchHint(freq) }).`
 			};
 		}
 	},
@@ -246,133 +245,139 @@ const DETAIL_PATTERNS = [
 		make: (n, ctx) => {
 			const N = parseLiteral(n.children[1].op);
 			return {
-				effect: `Multiplies t by ${ N } — t now ticks ${ N }× as fast (still wraps to 32 bits eventually).`,
-				sound: `Same shape as plain t, pitched ${ N }× higher. Common building block for melodic lines.`,
-				numbers: `At ${ formatRate(ctx.sampleRate) }: a 1-Hz feature in t becomes a ${ N }-Hz feature here.`
+				effect: `Speeds t up by ${ N }× — same sawtooth shape as plain t, ticking ${ N }× faster per sample.`,
+				sound: `Raises the pitch by a factor of ${ N }. Every frequency component in t shifts ${ N }× higher.`,
+				numbers: `At ${ formatRate(ctx.sampleRate) }: t's lowest-bit flip (~${ formatRate(ctx.sampleRate / 2) }) is now at ~${ formatRate(ctx.sampleRate / 2 * N) }.`
 			};
 		}
 	}
 ];
 
+
 const KIND_DETAILS = {
 	BinaryExpression: (n, ctx) => {
 		switch(n.op) {
 		case '+': return {
-			effect: `Adds the inputs as integers.`,
-			sound: `Mixes voices — louder ones (with bigger numeric range) dominate. There's no normalization, so coefficients in front of each summand set the relative levels.`,
+			effect: `Adds two numbers together. In bytebeat this is the mixer — each voice contributes its value to the sum. No normalization, no clipping.`,
+			sound: `Mixing — the voice with the largest numeric range dominates. Coefficients (×10, ×4) are the "faders" for each term.`,
 			numbers: ''
 		};
 		case '|': return {
-			effect: `Bitwise OR — a bit is 1 in the result if it's 1 in EITHER input.`,
-			sound: `Layers signals additively in bit-space rather than amplitude-space. Bits never cancel, so the result tends to sit higher numerically and sounds louder/brighter.`,
+			effect: `Bitwise OR — sets each bit to 1 if either input has a 1 there. Like stacking transparent sheets — no bits ever cancel.`,
+			sound: `Layering — brighter and louder than + because bits pile up without subtraction. Creates thick, buzzy textures.`,
 			numbers: ''
 		};
 		case '&': return {
-			effect: `Bitwise AND — a bit is 1 only if it's 1 in BOTH inputs.`,
-			sound: `Acts as a gate or mask. One side suppresses the other wherever its bit is 0. Produces silences and rhythmic gaps when one side toggles slowly.`,
+			effect: `Bitwise AND — keeps only the bits that are 1 in both inputs. The second input acts as a mask on the first.`,
+			sound: `Gating — where the mask is 0, the output silences. Where it's 1, signal passes. Creates rhythmic gaps when one side toggles.`,
 			numbers: ''
 		};
 		case '^': return {
-			effect: `Bitwise XOR — a bit is 1 if it's different between the inputs (1 in exactly one of them).`,
-			sound: `Flips bits in one signal where the other is 1. Produces phase-like inversions and bit-pattern rearrangements as inputs evolve.`,
+			effect: `Bitwise XOR — a bit is 1 if exactly one input has a 1. Like "flip wherever the second input says 1."`,
+			sound: `Phase-shifting — partially inverts the signal in a pattern-driven way. Timbre evolves as the toggle pattern changes over time.`,
 			numbers: ''
 		};
 		case '*': return {
-			effect: `Integer multiplication.`,
-			sound: `Scales the signal numerically. Used for gain (constant × subtree) or pitch shift (t × constant — t now ticks faster).`,
+			effect: `Integer multiplication. Scales the value — gain (N × voice = N× louder) or pitch shift (t × N = N× faster).`,
+			sound: `Bigger numbers = louder (when used as a coefficient) or higher (when applied to t).`,
 			numbers: ''
 		};
 		case '>>': return {
-			effect: `Right-shift — divides by 2^N (signed), throwing away the lowest N bits.`,
-			sound: `Slows down a signal — fewer bit changes per sample. Often used to derive low-rate modulators from t.`,
+			effect: `Divides by a power of 2, discarding remainder. Each shift right halves the change rate.`,
+			sound: `Slows the signal. A shift of 12 at 8 kHz means ~2 changes per second — felt as rhythm, not heard as a tone.`,
 			numbers: ''
 		};
 		case '<<': return {
-			effect: `Left-shift — multiplies by 2^N. Speeds bit changes up.`,
-			sound: `Pitches a signal up by N octaves.`,
+			effect: `Multiplies by a power of 2. Each shift left doubles the change rate — one octave per shift.`,
+			sound: `Speeds the signal up. Each bit of shift = one octave higher.`,
 			numbers: ''
 		};
 		case '%': return {
-			effect: `Modulo — wraps the left operand back to 0 every N steps.`,
-			sound: `Produces a sawtooth at the wrap rate. Equivalent to & (N − 1) when N is a power of 2 but works for any N.`,
+			effect: `Wrap-around division — the value resets to 0 every N steps. Never exceeds N-1.`,
+			sound: `Creates a sawtooth wave. The wrap rate = sample rate ÷ N. At 8 kHz, t % 256 wraps 8000÷256 ≈ 31 Hz — a low bass note.`,
 			numbers: ''
 		};
 		}
-		return { effect: `Binary "${ n.op }" applied to two operands.`, sound: '', numbers: '' };
+		return { effect: '', sound: '', numbers: '' };
 	},
 	UnaryExpression: n => ({
-		effect: `Unary "${ n.op }" applied to one operand. ~ inverts every bit; − negates; ! is logical NOT (returns 0 or 1).`,
-		sound: '',
+		effect: '~' === n.op ? `Bitwise NOT — flips every 0→1 and 1→0. Low values become high, high become low.` :
+			'-' === n.op ? `Arithmetic negation. Positive→negative, negative→positive.` :
+			'!' === n.op ? `Logical NOT — nonzero→0, zero→1. Reduces signal to binary on/off.` :
+			`Unary "${ n.op }" applied to one operand.`,
+		sound: '~' === n.op ? `Inverts the waveform — can flip a melody upside-down.` :
+			'-' === n.op ? `Mirrors the waveform around zero — the sign flips.` :
+			'!' === n.op ? `Reduces to square wave — only 0s and 1s.` : '',
 		numbers: ''
 	}),
 	MulConstExpression: (n, ctx) => {
 		const k = parseLiteral(n.op.replace(/^×\s*/, ''));
 		return {
-			effect: `Multiplies the subtree by the constant ${ k }.`,
-			sound: `Sets the relative volume of this voice in the final mix. Bigger values dominate when summed with other voices.`,
-			numbers: isFinite(k) ? `Voice contributes proportionally — if another summand has constant K, this one is ${ (k / 1).toFixed(0) }/K of the mix.` : ''
+			effect: `Multiplies the subtree by ${ k } — a volume knob for this branch of the tree.`,
+			sound: `A gain of ${ k }× makes this voice ${ k }× louder when summed into the mix. Bigger coefficients dominate over smaller ones.`,
+			numbers: ''
 		};
 	},
 	ConditionalExpression: () => ({
-		effect: `If the test is truthy (non-zero), use the "then" branch; otherwise the "else" branch.`,
-		sound: `Branches between two signals based on a condition. Lets you stitch sections together by time (e.g., t < 8000 ? sectionA : sectionB).`,
+		effect: `Chooses between two values based on a test: if (test ≠ 0) → first branch, else → second branch.`,
+		sound: `Switches between two signal paths at a threshold — e.g. t < 8000 ? intro : main stitches two sections back-to-back in time.`,
 		numbers: ''
 	}),
+	CallExpression: n => ({
+		effect: `Calls ${ n.op } with the arguments shown. Math functions (sin, cos, pow) operate on continuous values — they step outside pure bitwise math.`,
+		sound: `Functions produce smooth, continuous tones — purer-sounding than bitwise operations alone. Math.sin(t/freq) gives a clean sine wave at the chosen frequency.`,
+		numbers: ''
+	}),
+	Variable: n => n.op === 't' ? ({
+		effect: `t is the sample clock — a 32-bit integer that counts 0,1,2,3… one increment per audio sample. At 8 kHz: 8,000 ticks per second.`,
+		sound: `Plain t sounds like noise — its lowest bits flip at audio rate (every few samples). The magic comes from manipulating t's bit-pattern with shifts, masks, and combinators to shape it into tones and rhythms.`,
+		numbers: ''
+	}) : ({ effect: `Variable "${ n.op }" — stores a computed value for reuse.`, sound: '', numbers: '' }),
+	Number: n => ({ effect: `The literal ${ n.op } — a constant, never changing over time.`, sound: '', numbers: '' }),
 	SequenceExpression: () => ({
-		effect: `Comma operator: evaluates each child left-to-right and yields the last one's value.`,
-		sound: `Each step before the last is here for side-effects (typically variable assignments). Only the final expression contributes to the audio sample. Useful for stashing intermediate values into variables that the final expression reads back.`,
+		effect: `Runs each step left-to-right, keeping only the last step's result.`,
+		sound: `Earlier steps set up machinery (assigning helpers, computing tables). Only the final step directly produces the audio sample.`,
 		numbers: ''
 	}),
 	AssignmentExpression: n => ({
-		effect: `Stores the right-hand value into the left-hand name (using "${ n.op }"). The expression itself yields the value that was stored, so it can be embedded inside larger expressions.`,
-		sound: `On its own, an assignment doesn't make sound — it sets state for later expressions to read. Bytebeats often use a sequence of assignments inside a comma-expression to build up intermediate signals before the final sample.`,
+		effect: `Stores the right-hand value into "${ n.op.split('=')[0] || n.op }". The assignment itself yields the stored value.`,
+		sound: `Assignments don't make sound — they compute and stash intermediate results (pitches, envelopes, phase accumulators) that the final expression reads back.`,
 		numbers: ''
 	}),
 	FunctionExpression: () => ({
-		effect: `Anonymous function literal. Returns the body expression when called with arguments.`,
-		sound: `The function itself doesn't produce sound — it's a recipe. The audio shows up wherever the function is called (look for "name(args)" elsewhere in the expression). Bytebeats use this to factor out a synth voice or a frequency formula and reuse it across multiple notes.`,
+		effect: `A named recipe — defines a computation that other code can call with different arguments.`,
+		sound: `The function body (shown below this node) is what produces audio when called. Composers use functions to factor out repeating pattern generators.`,
 		numbers: ''
 	}),
 	ArrayExpression: n => ({
-		effect: `Constant array literal${ n.arrayCount ? ' with ' + n.arrayCount + ' element' + (n.arrayCount === 1 ? '' : 's') : '' }.`,
-		sound: `Used as a lookup table — typically a melody (`+ `pitches), volume envelope, or rhythm pattern. The array doesn't make sound on its own; it's indexed below by something like \`tbl[t>>13&7]\` to pick one value per slot of time.`,
+		effect: `A lookup table of ${ n.arrayCount || 0 } values — typically pitches for a melody, dynamics for an envelope, or weights for a rhythm.`,
+		sound: `The array alone is silent. It's indexed below (e.g. tbl[t>>13&7]) to pick one value per time-slot — stepping through the melody.`,
 		numbers: ''
 	}),
 	ObjectExpression: () => ({
-		effect: `Object literal — a bag of named values.`,
-		sound: `Rare in classic bytebeat. Usually for stashing parameters that other code reads back by name.`,
+		effect: `A bag of named values — uncommon in classic bytebeat.`,
+		sound: '',
 		numbers: ''
 	}),
 	MemberExpression: n => ({
 		effect: n.text.includes('[')
-			? `Subscript / array index: looks up an element of the left side at the position computed on the right.`
-			: `Property access: reads the named field of an object (e.g. Math.PI, this.foo).`,
+			? `Array lookup — reads element #index from the array. The index expression (in brackets) picks which value comes out.`
+			: `Property access — reads a named field from an object (e.g. Math.PI → the number π).`,
 		sound: n.text.includes('[')
-			? `When the index expression is a slow-counting integer (e.g. (t>>13)&7), this turns a constant table into a melody — one table value per slot.`
-			: ``,
+			? `When the index is driven by t>>N, this selects a new table value every 2^N samples — stepping through a melody, one note at a time.`
+			: '',
 		numbers: ''
 	}),
 	RegExp: () => ({
-		effect: `Regular expression literal.`,
-		sound: `Bytebeats sometimes embed encoded data inside regexes for byte-saving. The pattern itself isn't audio — surrounding code converts characters to numbers.`,
+		effect: `A regular expression — used in code-golf bytebeats to pack data compactly.`,
+		sound: '',
 		numbers: ''
 	}),
 	ParseError: () => ({
-		effect: `Lezer couldn't parse this region cleanly — usually some non-classic JS construct.`,
-		sound: `Code before/after the marker still runs as JavaScript; the explorer just can't draw structure for this bit.`,
+		effect: `The parser couldn't understand this part of the expression.`,
+		sound: '',
 		numbers: ''
 	}),
-	CallExpression: n => ({
-		effect: `Calls ${ n.op } with the listed arguments. Math functions (Math.sin, Math.floor, etc.) introduce continuous, non-bitwise behavior.`,
-		sound: `Functions like Math.sin produce smooth periodic waveforms — purer tones than bitwise math. Often used in floatbeat code.`,
-		numbers: ''
-	}),
-	Variable: n => n.op === 't' ? ({
-		effect: `t is the sample counter — a 32-bit integer that increments by 1 every audio sample.`,
-		sound: `On its own, t played at 8 kHz is a fast-rising sawtooth that wraps every 2^32/8000 ≈ 6.2 days. Its low bits are at audio rate (the lowest bit flips at half the sample rate); higher bits modulate slowly.`,
-		numbers: ''
-	}) : ({ effect: `Variable ${ n.op }.`, sound: '', numbers: '' }),
-	Number: n => ({ effect: `The literal value ${ n.op }.`, sound: '', numbers: '' })
 };
 
 function formatRate(sr) {

@@ -167,6 +167,7 @@ export class Explorer {
 		this.empty = document.getElementById('explorer-empty');
 		this.detail = document.getElementById('explorer-detail');
 		this.detailSource = this.detail.querySelector('.explorer-source');
+		this.waveform = document.getElementById('explorer-waveform');
 		this.detailEffect = this.detail.querySelector('.explorer-detail-effect');
 		this.detailEffectRow = this.detailEffect.parentElement;
 		this.detailSound = this.detail.querySelector('.explorer-detail-sound');
@@ -387,6 +388,63 @@ export class Explorer {
 		this.detailEffectRow.classList.toggle('hidden', !d.effect);
 		this.detailSoundRow.classList.toggle('hidden', !d.sound);
 		this.detailNumbersRow.classList.toggle('hidden', !d.numbers);
+		this.renderMiniWaveform(node, ctx.sampleRate);
+	}
+	// Evaluate the serialized subtree for 64 sample values and draw a small
+	// inline SVG waveform so you can SEE what the math produces — the single
+	// biggest intuition unlock for bytebeat.
+	renderMiniWaveform(node, sampleRate) {
+		if(!this.waveform) return;
+		this.waveform.classList.add('hidden');
+		this.waveform.replaceChildren();
+		// Stateful nodes (this.xx, assignments) can't be simulated cleanly.
+		if(node.text.includes('this.')) return;
+		let src;
+		try { src = serialize(node); } catch(_) { return; }
+		// Sequence + assignment expressions aren't single-value expressions.
+		if(node.kind === 'SequenceExpression' || node.kind === 'AssignmentExpression') return;
+		let fn;
+		try {
+			fn = new Function('t', '"use strict"; return (' + src + ') >>> 0;');
+		} catch(_) { return; }
+		const COUNT = 64, W = 224, H = 44, pad = 4;
+		const values = new Float64Array(COUNT);
+		let min = Infinity, max = -Infinity;
+		for(let t = 0; t < COUNT; t++) {
+			let v;
+			try { v = Number(fn(t)) || 0; } catch(_) { v = 0; }
+			values[t] = v;
+			if(v < min) min = v;
+			if(v > max) max = v;
+		}
+		const range = max - min || 1;
+		const points = [];
+		for(let i = 0; i < COUNT; i++) {
+			const x = pad + (i / (COUNT - 1)) * (W - pad * 2);
+			const y = pad + (1 - (values[i] - min) / range) * (H - pad * 2);
+			points.push(`${ x.toFixed(1) },${ y.toFixed(1) }`);
+		}
+		const svg = document.createElementNS(SVG_NS, 'svg');
+		svg.setAttribute('viewBox', `0 0 ${ W } ${ H }`);
+		svg.setAttribute('width', String(W));
+		svg.setAttribute('height', String(H));
+		svg.setAttribute('class', 'explorer-waveform-svg');
+		// center line
+		const cl = document.createElementNS(SVG_NS, 'line');
+		cl.setAttribute('x1', String(pad)); cl.setAttribute('y1', String(H / 2));
+		cl.setAttribute('x2', String(W - pad)); cl.setAttribute('y2', String(H / 2));
+		cl.setAttribute('stroke', '#5c636c'); cl.setAttribute('stroke-width', '0.5');
+		cl.setAttribute('stroke-dasharray', '3 2');
+		svg.appendChild(cl);
+		const poly = document.createElementNS(SVG_NS, 'polyline');
+		poly.setAttribute('points', points.join(' '));
+		poly.setAttribute('fill', 'none');
+		poly.setAttribute('stroke', '#4af');
+		poly.setAttribute('stroke-width', '1.2');
+		poly.setAttribute('stroke-linejoin', 'round');
+		svg.appendChild(poly);
+		this.waveform.appendChild(svg);
+		this.waveform.classList.remove('hidden');
 	}
 	soloSelected() {
 		if(this.selectedId == null) {
@@ -591,6 +649,11 @@ export class Explorer {
 		g.setAttribute('data-from', String(node.from));
 		g.setAttribute('data-to', String(node.to));
 		g.setAttribute('data-id', String(node._id));
+		// Native browser tooltip on hover — bottom line from labels() for
+		// quick per-node context without clicking. When bottom is empty,
+		// fall back to the node's kind and source range for orientation.
+		const tip = bottom || `${ node.kind } [${ node.from }–${ node.to }]`;
+		g.setAttribute('title', node.text.length > 60 ? node.text.slice(0, 58) + '… — ' + tip : tip);
 		const rect = document.createElementNS(SVG_NS, 'rect');
 		rect.setAttribute('class', 'explorer-node-rect');
 		rect.setAttribute('x', String(node._x));
