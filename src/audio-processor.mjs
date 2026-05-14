@@ -17,6 +17,8 @@ class audioProcessor extends AudioWorkletProcessor {
 		this.sampleRate = 8000;
 		this.sampleRatio = 1;
 		this.srDivisor = 1;
+		this.pcmBuf = new Float32Array(1024);
+		this.pcmHead = 0;
 		Object.seal(this);
 		audioProcessor.deleteGlobals();
 		audioProcessor.freezeGlobals();
@@ -129,6 +131,13 @@ class audioProcessor extends AudioWorkletProcessor {
 			}
 			chData[0][i] = this.outValue[0];
 			chData[1][i] = this.outValue[1];
+			// Accumulate PCM for projectM — write interleaved stereo to a ring buffer.
+			let h = this.pcmHead;
+			if (h + 1 < this.pcmBuf.length) {
+				this.pcmBuf[h] = this.outValue[0];
+				this.pcmBuf[h + 1] = this.outValue[1];
+				this.pcmHead = h + 2;
+			}
 		}
 		if(Math.abs(byteSample) > Number.MAX_SAFE_INTEGER) {
 			this.resetTime();
@@ -144,6 +153,11 @@ class audioProcessor extends AudioWorkletProcessor {
 		if(drawBuffer.length) {
 			isSend = true;
 			data.drawBuffer = drawBuffer;
+		}
+		if(this.pcmHead >= 512) {
+			isSend = true;
+			data.pcm = this.pcmBuf.slice(0, this.pcmHead);
+			this.pcmHead = 0;
 		}
 		if(isSend) {
 			this.sendData(data);

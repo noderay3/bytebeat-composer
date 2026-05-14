@@ -392,6 +392,9 @@ globalThis.bytebeat = new class {
 			this.setCounterValue(byteSample);
 			this.setByteSample(byteSample);
 		}
+		if(data.pcm) {
+			this.postCoderadio({ pcm: Array.from(data.pcm) });
+		}
 		if(Array.isArray(drawBuffer)) {
 			scope.drawBuffer = scope.drawBuffer.concat(drawBuffer);
 			const limit = scope.canvasWidth * (1 << scope.drawScale) - 1;
