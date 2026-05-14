@@ -1,5 +1,7 @@
 import { javascriptLanguage } from '@codemirror/lang-javascript';
 import { Annotator } from './annotator.mjs';
+import { GraphCanvas, NODE_W, NODE_H } from './graph-canvas.mjs';
+import { treeToGraph } from './graph-model.mjs';
 import { instrument } from './instrumenter.mjs';
 import { serialize } from './serializer.mjs';
 
@@ -158,6 +160,9 @@ export class Explorer {
 		this.annotator = new Annotator();
 		this.byId = new Map();
 		this.selectedId = null;
+		this.graph = null;           // current Graph instance
+		this.canvas = null;          // GraphCanvas (lazy-init)
+		this.useGraph = true;        // toggle: graph-driven layout vs tree
 		// Viewport transform applied to a <g> inside the SVG. tx/ty in the
 		// SVG's pixel coordinate space; scale is dimensionless.
 		this.tx = 0;
@@ -650,6 +655,44 @@ export class Explorer {
 		}
 		this.empty.classList.add('hidden');
 		this.assignIds(tree, { n: 0 });
+
+		if (this.useGraph && this.graph && this.graph.nodes.size > 0) {
+			// ── Graph-driven layout ──────────────────────────────
+			this.svg.removeAttribute('viewBox');
+			this.defineMarkers();
+			this.viewport = document.createElementNS(SVG_NS, 'g');
+			this.viewport.setAttribute('class', 'explorer-viewport');
+			this.svg.appendChild(this.viewport);
+			if (!this.canvas) {
+				this.canvas = new GraphCanvas(this.svg, this.graph, {
+					onHover: (from, to) => { /* graph nodes don't map to source ranges yet */ },
+					onLeave: () => {},
+					onClick: (node) => { /* detail panel */ },
+				});
+			}
+			this.canvas.graph = this.graph;
+			this.canvas.viewport = this.viewport;
+			this.canvas.render();
+			// Estimate tree bounds from node positions.
+			let maxX = 0, maxY = 0;
+			for (const [, pos] of this.canvas.nodePos) {
+				if (pos.x + NODE_W > maxX) maxX = pos.x + NODE_W;
+				if (pos.y + NODE_H > maxY) maxY = pos.y + NODE_H;
+			}
+			this.treeW = maxX + 16;
+			this.treeH = maxY + 16 + OUTPUT_GAP + NODE_H;
+			if (this._lastFittedSource !== source) {
+				this.fitToView();
+				this._lastFittedSource = source;
+			} else {
+				this.applyTransform();
+			}
+			// Re-instrument for live mode.
+			if (this.isLive) { this.stopLive(); this.startLive(); }
+			return;
+		}
+
+		// ── Tree-driven layout (fallback) ────────────────────
 		this.measure(tree);
 		// Bottom-up layout: leaves at y=top, root at y=bottom (signal flow).
 		const treeDepth = this.depth(tree);
@@ -928,6 +971,9 @@ export class Explorer {
 		const raw = root ? this.build(root, source) : null;
 		const shaped = raw ? specialize(flatten(raw)) : null;
 		this.lastTree = shaped ? inline(shaped) : null;
+		// Also build the graph model from the raw (pre-specialize) tree so the
+		// graph canvas always starts from a clean, non-specialized structure.
+		this.graph = raw ? treeToGraph(raw) : null;
 		return this.lastTree;
 	}
 	// Skip past Script / ExpressionStatement / ParenthesizedExpression wrappers
