@@ -122,19 +122,26 @@ function describeOutput(mode, sr) {
 	}
 }
 
-function valueToHSL(raw, mode) {
-	let norm;
-	switch(mode) {
-	case 'Signed Bytebeat': norm = (raw + 128) / 255; break;
-	case 'Floatbeat': norm = (raw + 1) / 2; break;
-	default: norm = raw / 255;
-	}
+// Per-node normalized color. norm [0,1] = how "hot" this node is relative
+// to its own recent range. delta [0,1] = how fast it's changing.
+// Resting nodes stay cool blue; active/hot nodes shift toward warm.
+function valueToHSL(norm, delta = 0) {
 	norm = Math.max(0, Math.min(1, norm));
-	// 0 = silence/cold (blue), 1 = loud/hot (red). Dark bg so lightness stays low.
-	const h = 220 - norm * 220;
-	const s = 50 + norm * 40;
-	const l = 7 + norm * 20;
+	delta = Math.max(0, Math.min(1, delta));
+	const h = 220 - norm * 160 - delta * 60;
+	const s = 40 + norm * 40 + delta * 20;
+	const l = 5 + norm * 22 + delta * 6;
 	return `hsl(${ h.toFixed(0) }, ${ s.toFixed(0) }%, ${ l.toFixed(0) }%)`;
+}
+
+// Ring buffer helpers for per-node value history.
+function ringNew(cap = 64) { return { d: new Float64Array(cap), h: 0, n: 0, min: 0, max: 1 }; }
+function ringPush(b, v) {
+	b.d[b.h] = v; b.h = (b.h + 1) % b.d.length;
+	if (b.n < b.d.length) b.n++;
+	let mn = Infinity, mx = -Infinity;
+	for (let i = 0; i < b.n; i++) { const x = b.d[i]; if (x < mn) mn = x; if (x > mx) mx = x; }
+	b.min = mn; b.max = mx === mn ? mn + 1 : mx;
 }
 
 const SVG_NS = 'http://www.w3.org/2000/svg';
@@ -503,15 +510,12 @@ export class Explorer {
 	stopLive() {
 		this.isLive = false;
 		this.refreshLiveToggle();
-		if(this._liveRaf) {
-			cancelAnimationFrame(this._liveRaf);
-			this._liveRaf = 0;
-		}
-		// Reset every node rect fill to its static role color.
-		if(this.viewport) {
-			this.viewport.querySelectorAll('.explorer-node-rect').forEach(r => {
-				r.removeAttribute('style');
-			});
+		if (this._liveRaf) { cancelAnimationFrame(this._liveRaf); this._liveRaf = 0; }
+		this._liveRings = null; this._livePrev = null; this._liveTick = 0;
+		if (this.viewport) {
+			this.viewport.querySelectorAll('.explorer-node-rect').forEach(r => r.removeAttribute('style'));
+			this.viewport.querySelectorAll('.explorer-edge').forEach(e => e.removeAttribute('style'));
+			this.viewport.querySelectorAll('.explorer-miniwave').forEach(w => w.remove());
 		}
 	}
 	_tickLive() {
@@ -556,17 +560,76 @@ export class Explorer {
 	_applyLiveColors(values) {
 		if(!this.viewport) return;
 		const mode = (globalThis.bytebeat && globalThis.bytebeat.mode) || 'Bytebeat';
+		const masked = mode === 'Bytebeat' ? values.map(v => v & 0xff) : values;
+		// Init ring buffers on first call.
+		if (!this._liveRings) this._liveRings = values.map(() => ringNew(64));
+		if (!this._livePrev) this._livePrev = new Float64Array(values.length);
+		const rings = this._liveRings;
+		const norms = new Float64Array(values.length);
+		const deltas = new Float64Array(values.length);
+		for (let i = 0; i < values.length; i++) {
+			const v = masked[i];
+			ringPush(rings[i], v);
+			const r = rings[i];
+			const range = r.max - r.min;
+			norms[i] = range > 0 ? (v - r.min) / range : 0.5;
+			const prev = this._livePrev[i];
+			deltas[i] = range > 0 ? Math.abs(v - prev) / range : 0;
+			this._livePrev[i] = v;
+		}
 		const gs = this.viewport.querySelectorAll('.explorer-node');
-		// Batch update: iterate g elements, match to live node by data-id
-		for(const g of gs) {
+		let avgNorm = 0, matchN = 0;
+		for (const g of gs) {
 			const id = +g.getAttribute('data-id');
-			if(isNaN(id)) continue;
+			if (isNaN(id)) continue;
 			const node = this.byId.get(id);
-			if(!node || node._liveId == null || node._liveId >= values.length) continue;
-			const v = values[node._liveId];
+			if (!node || node._liveId == null || node._liveId >= values.length) continue;
+			const idx = node._liveId;
 			const rect = g.querySelector('.explorer-node-rect');
-			if(!rect) continue;
-			rect.setAttribute('style', `fill: ${ valueToHSL(v, mode) };`);
+			if (rect) rect.setAttribute('style', `fill:${ valueToHSL(norms[idx], deltas[idx]) }; stroke-width:${ 1 + deltas[idx] * 3 };`);
+			avgNorm += norms[idx]; matchN++;
+		}
+		if (matchN) avgNorm /= matchN;
+		// Edge pulsing.
+		this.viewport.querySelectorAll('.explorer-edge').forEach(e => {
+			e.setAttribute('style', `stroke-opacity:${ 0.15 + avgNorm * 0.85 };`);
+		});
+		// Mini-waveforms — every 3rd tick.
+		if ((this._liveTick = ((this._liveTick || 0) + 1)) % 3 === 0) this._drawMiniWaves();
+	}
+	_drawMiniWaves() {
+		const gs = this.viewport.querySelectorAll('.explorer-node');
+		for (const g of gs) {
+			const id = +g.getAttribute('data-id');
+			if (isNaN(id)) continue;
+			const node = this.byId.get(id);
+			if (!node || node._liveId == null || !this._liveRings) continue;
+			const ring = this._liveRings[node._liveId];
+			if (!ring || ring.n < 2) continue;
+			const rect = g.querySelector('.explorer-node-rect');
+			if (!rect) continue;
+			const rx = parseFloat(rect.getAttribute('x')), ry = parseFloat(rect.getAttribute('y'));
+			const rw = parseFloat(rect.getAttribute('width')), rh = parseFloat(rect.getAttribute('height'));
+			let wave = g.querySelector('.explorer-miniwave');
+			if (!wave) {
+				wave = document.createElementNS(SVG_NS, 'polyline');
+				wave.setAttribute('class', 'explorer-miniwave');
+				wave.setAttribute('fill', 'none');
+				wave.setAttribute('stroke', 'rgba(255,255,255,0.45)');
+				wave.setAttribute('stroke-width', '0.8');
+				wave.setAttribute('stroke-linejoin', 'round');
+				g.appendChild(wave);
+			}
+			const W = rw - 16, H = 12, wx = rx + 8, wy = ry + rh - 18;
+			wave.setAttribute('transform', `translate(${ wx.toFixed(1) }, ${ wy.toFixed(1) })`);
+			const range = ring.max - ring.min;
+			const pts = [];
+			for (let i = 0; i < ring.n; i++) {
+				const x = (i / Math.max(ring.n - 1, 1)) * W;
+				const nr = range > 0 ? (ring.d[i] - ring.min) / range : 0.5;
+				pts.push(`${ x.toFixed(1) },${ ((1 - nr) * H).toFixed(1) }`);
+			}
+			wave.setAttribute('points', pts.join(' '));
 		}
 	}
 	refreshLiveToggle() {
