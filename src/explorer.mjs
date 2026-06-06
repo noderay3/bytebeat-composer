@@ -392,20 +392,6 @@ export class Explorer {
 		// confusing — the tree shifted under the user's pointer.
 		this.showDetail(node);
 	}
-	relayout() {
-		if(!this.lastTree || !this.svg) {
-			return;
-		}
-		this.svg.replaceChildren();
-		this.measure(this.lastTree);
-		this.position(this.lastTree, 0, 4);
-		const totalW = this.lastTree._sw + 8;
-		const totalH = this.depth(this.lastTree) * (NODE_HEIGHT + LEVEL_GAP) + NODE_HEIGHT + 8;
-		this.svg.setAttribute('width', String(totalW));
-		this.svg.setAttribute('height', String(totalH));
-		this.svg.setAttribute('viewBox', `0 0 ${ totalW } ${ totalH }`);
-		this.draw(this.lastTree);
-	}
 	showDetail(node) {
 		if(!this.detail) {
 			return;
@@ -762,8 +748,7 @@ export class Explorer {
 		const showVoices = tree.kind === 'BinaryExpression' && tree.op === '+' && tree.children.length >= 2;
 		const top = LANE_LABEL_HEIGHT + 4;
 		const rootY = top + treeDepth * (NODE_HEIGHT + LEVEL_GAP);
-		this.position(tree, 0, rootY);
-		const totalW = tree._sw + 16;
+		const totalW = this.layout(tree, rootY);
 		const totalH = rootY + NODE_HEIGHT + OUTPUT_GAP + NODE_HEIGHT + 8;
 		this.treeW = totalW;
 		this.treeH = totalH;
@@ -802,23 +787,17 @@ export class Explorer {
 		}
 	}
 	measure(node) {
+		// Per-node width only. The prior layout packed siblings into a fixed
+		// subtree slot (_sw); Buchheim places by contour, so the slot concept
+		// is gone — siblings overlap horizontally where their contours allow.
 		const { top, bottom } = this.labels(node);
 		// CHAR_WIDTH suits the monospace top line; sans-serif bottom is a
 		// touch wider than mono at the same px size so we use ~6.5.
 		const topW = top.length * CHAR_WIDTH;
 		const botW = Math.ceil(bottom.length * 6.5);
 		node._w = Math.max(72, NODE_PADDING_X * 2 + Math.max(topW, botW));
-		if(this.isVisualLeaf(node)) {
-			node._sw = node._w;
-			return;
-		}
-		let total = 0;
-		for(const c of node.children) {
-			this.measure(c);
-			total += c._sw;
-		}
-		total += SIBLING_GAP * (node.children.length - 1);
-		node._sw = Math.max(node._w, total);
+		if(this.isVisualLeaf(node)) return;
+		for(const c of node.children) this.measure(c);
 	}
 	// "Visual leaf" — no children drawn, even when the AST has them. Captures
 	// raw bytebeat inputs like `t`, numbers, and `t >> N` / `t << N` /
@@ -827,20 +806,163 @@ export class Explorer {
 	isVisualLeaf(node) {
 		return node.children.length === 0 || isLeafShape(node);
 	}
-	position(node, x, y) {
-		node._x = x + (node._sw - node._w) / 2;
-		node._y = y;
-		if(this.isVisualLeaf(node)) {
+	// Buchheim tidy-tree layout — linear time, minimum width, no overlapping
+	// nodes, no overlapping subtrees. Reference: Buchheim/Jünger/Leipert 2002
+	// "Improving Walker's Algorithm to Run in Linear Time." Children sit
+	// ABOVE their parent (signal flows down into ops). Assigns _x/_y on every
+	// node. Returns the canvas width needed; left edge is at 8px after shift.
+	layout(root, rootY) {
+		this._buchheimInit(root, null);
+		this._firstWalk(root);
+		this._secondWalk(root, -root._prelim);
+		this._applyY(root, rootY);
+		// Shift x so leftmost node is at 8px; collect bounding box.
+		let minX = Infinity, maxX = -Infinity;
+		this._eachNode(root, n => {
+			if(n._x < minX) minX = n._x;
+			if(n._x + n._w > maxX) maxX = n._x + n._w;
+		});
+		const dx = 8 - minX;
+		this._eachNode(root, n => { n._x += dx; });
+		return (maxX - minX) + 16;
+	}
+	_buchheimInit(node, parent) {
+		node._prelim = 0;
+		node._mod = 0;
+		node._thread = null;
+		node._ancestor = node;
+		node._change = 0;
+		node._shift = 0;
+		node._parent = parent;
+		if(this.isVisualLeaf(node)) return;
+		for(const c of node.children) this._buchheimInit(c, node);
+	}
+	_firstWalk(v) {
+		if(this.isVisualLeaf(v) || v.children.length === 0) {
+			const ls = this._leftSibling(v);
+			v._prelim = ls ? ls._prelim + this._distance(ls, v) : 0;
 			return;
 		}
-		const total = node.children.reduce((s, c) => s + c._sw, 0)
-			+ SIBLING_GAP * (node.children.length - 1);
-		let cx = x + (node._sw - total) / 2;
-		for(const c of node.children) {
-			// Children sit ABOVE the parent — signal flows down into the parent.
-			this.position(c, cx, y - NODE_HEIGHT - LEVEL_GAP);
-			cx += c._sw + SIBLING_GAP;
+		let defaultAncestor = v.children[0];
+		for(const w of v.children) {
+			this._firstWalk(w);
+			defaultAncestor = this._apportion(w, defaultAncestor);
 		}
+		this._executeShifts(v);
+		const first = v.children[0]._prelim;
+		const last = v.children[v.children.length - 1]._prelim;
+		const midpoint = (first + last) / 2;
+		const ls = this._leftSibling(v);
+		if(ls) {
+			v._prelim = ls._prelim + this._distance(ls, v);
+			v._mod = v._prelim - midpoint;
+		} else {
+			v._prelim = midpoint;
+		}
+	}
+	_apportion(v, defaultAncestor) {
+		const w = this._leftSibling(v);
+		if(!w) return defaultAncestor;
+		// vi*/vo* are the inner/outer right/left contour walkers.
+		let vir = v, vor = v;
+		let vil = w, vol = this._leftmostSibling(v);
+		let sir = vir._mod, sor = vor._mod;
+		let sil = vil._mod, sol = vol._mod;
+		let nextL = this._nextLeft(vir), nextR = this._nextRight(vil);
+		while(nextR && nextL) {
+			vil = nextR;
+			vir = nextL;
+			vol = this._nextLeft(vol);
+			vor = this._nextRight(vor);
+			vor._ancestor = v;
+			const shift = (vil._prelim + sil) - (vir._prelim + sir) + this._distance(vil, vir);
+			if(shift > 0) {
+				const a = this._buchheimAncestor(vil, v, defaultAncestor);
+				this._moveSubtree(a, v, shift);
+				sir += shift;
+				sor += shift;
+			}
+			sil += vil._mod;
+			sir += vir._mod;
+			sol += vol._mod;
+			sor += vor._mod;
+			nextL = this._nextLeft(vir);
+			nextR = this._nextRight(vil);
+		}
+		if(nextR && !this._nextRight(vor)) {
+			vor._thread = nextR;
+			vor._mod += sil - sor;
+		}
+		if(nextL && !this._nextLeft(vol)) {
+			vol._thread = nextL;
+			vol._mod += sir - sol;
+			defaultAncestor = v;
+		}
+		return defaultAncestor;
+	}
+	_moveSubtree(wl, wr, shift) {
+		const wlIdx = wl._parent ? wl._parent.children.indexOf(wl) : 0;
+		const wrIdx = wr._parent ? wr._parent.children.indexOf(wr) : 0;
+		const subtrees = wrIdx - wlIdx;
+		if(subtrees === 0) return;
+		wr._change -= shift / subtrees;
+		wr._shift += shift;
+		wl._change += shift / subtrees;
+		wr._prelim += shift;
+		wr._mod += shift;
+	}
+	_executeShifts(v) {
+		let shift = 0, change = 0;
+		for(let i = v.children.length - 1; i >= 0; i--) {
+			const w = v.children[i];
+			w._prelim += shift;
+			w._mod += shift;
+			change += w._change;
+			shift += w._shift + change;
+		}
+	}
+	_buchheimAncestor(vil, v, defaultAncestor) {
+		if(v._parent && v._parent.children.indexOf(vil._ancestor) !== -1) {
+			return vil._ancestor;
+		}
+		return defaultAncestor;
+	}
+	_nextLeft(v) {
+		return (this.isVisualLeaf(v) || v.children.length === 0) ? v._thread : v.children[0];
+	}
+	_nextRight(v) {
+		return (this.isVisualLeaf(v) || v.children.length === 0) ? v._thread : v.children[v.children.length - 1];
+	}
+	_leftSibling(v) {
+		if(!v._parent) return null;
+		const idx = v._parent.children.indexOf(v);
+		return idx > 0 ? v._parent.children[idx - 1] : null;
+	}
+	_leftmostSibling(v) {
+		if(!v._parent) return null;
+		return v._parent.children[0];
+	}
+	_distance(a, b) {
+		return (a._w + b._w) / 2 + SIBLING_GAP;
+	}
+	_secondWalk(v, m) {
+		v._x = v._prelim + m;
+		if(this.isVisualLeaf(v)) return;
+		for(const c of v.children) this._secondWalk(c, m + v._mod);
+	}
+	_applyY(node, rootY) {
+		const setY = (n, depth) => {
+			n._y = rootY - depth * (NODE_HEIGHT + LEVEL_GAP);
+			if(!this.isVisualLeaf(n)) {
+				for(const c of n.children) setY(c, depth + 1);
+			}
+		};
+		setY(node, 0);
+	}
+	_eachNode(node, cb) {
+		cb(node);
+		if(this.isVisualLeaf(node)) return;
+		for(const c of node.children) this._eachNode(c, cb);
 	}
 	depth(node) {
 		if(this.isVisualLeaf(node)) {
