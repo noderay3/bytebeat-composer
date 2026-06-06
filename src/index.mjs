@@ -223,14 +223,14 @@ globalThis.bytebeat = new class {
 		if(!('mediaSession' in navigator)) {
 			return;
 		}
-		navigator.mediaSession.setActionHandler('play', () => {
-			this.playbackToggle(true, true);
-			this.postCoderadio('play');
-		});
-		navigator.mediaSession.setActionHandler('pause', () => {
-			this.playbackToggle(false, true);
-			this.postCoderadio('pause');
-		});
+		// Intentionally NOT registering 'play' and 'pause' MediaSession action
+		// handlers. CodeRadio's Swift host catches hardware media keys at the
+		// raw HID layer (NSEvent.systemDefined) and drives radio.togglePlayPause()
+		// based on Swift's authoritative `isPlaying` state. If we ALSO register
+		// the MediaSession handlers here, WebKit fires them after our HID
+		// monitor — and since we never update navigator.mediaSession.playbackState,
+		// WebKit always dispatches 'play' regardless of actual state, racing our
+		// HID toggle and never letting the user pause.
 		try {
 			navigator.mediaSession.setActionHandler('nexttrack', () => this.postCoderadio('next'));
 			navigator.mediaSession.setActionHandler('previoustrack', () => this.postCoderadio('previous'));
