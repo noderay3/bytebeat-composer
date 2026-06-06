@@ -170,6 +170,10 @@ export class Explorer {
 		this.graph = null;           // current Graph instance
 		this.canvas = null;          // GraphCanvas (lazy-init)
 		this.useGraph = true;        // toggle: graph-driven layout vs tree
+		// Position store — Map keyed by content-fingerprint of a subtree, value
+		// is { x, y, locked }. Persisted to localStorage so manually-dragged
+		// node positions (Phase G) survive across edits and reloads.
+		this.positionStore = this._loadPositionStore();
 		// Viewport transform applied to a <g> inside the SVG. tx/ty in the
 		// SVG's pixel coordinate space; scale is dimensionless.
 		this.tx = 0;
@@ -503,6 +507,8 @@ export class Explorer {
 			this.viewport.querySelectorAll('.explorer-edge').forEach(e => e.removeAttribute('style'));
 			this.viewport.querySelectorAll('.explorer-miniwave').forEach(w => w.remove());
 		}
+		const ed = globalThis.bytebeat && globalThis.bytebeat.editor;
+		if (ed && ed.clearActiveRanges) ed.clearActiveRanges();
 	}
 	_tickLive() {
 		if(!this.isLive) return;
@@ -580,6 +586,33 @@ export class Explorer {
 		this.viewport.querySelectorAll('.explorer-edge').forEach(e => {
 			e.setAttribute('style', `stroke-opacity:${ 0.15 + avgNorm * 0.85 };`);
 		});
+		// Push live-active source ranges to the editor (Strudel-style outline).
+		// Take top-K by activity; dedup ranges produced by inlined sites; only
+		// surface "meaningfully active" ranges (norm > 0.35) so the editor
+		// isn't a permanent flicker of every node.
+		const ed = globalThis.bytebeat && globalThis.bytebeat.editor;
+		if (ed && ed.setActiveRanges) {
+			const seen = new Set();
+			const ranges = [];
+			for (const [, node] of this.byId) {
+				if (node._liveId == null || node._liveId >= values.length) continue;
+				if (typeof node.from !== 'number' || typeof node.to !== 'number') continue;
+				if (node.from >= node.to) continue;
+				const n = norms[node._liveId];
+				if (n < 0.35) continue;
+				const key = node.from + ':' + node.to;
+				if (seen.has(key)) continue;
+				seen.add(key);
+				ranges.push({
+					from: node.from,
+					to: node.to,
+					color: valueToHSL(n, deltas[node._liveId]),
+					norm: n
+				});
+			}
+			ranges.sort((a, b) => b.norm - a.norm);
+			ed.setActiveRanges(ranges.slice(0, 12));
+		}
 		// Mini-waveforms — every 3rd tick.
 		if ((this._liveTick = ((this._liveTick || 0) + 1)) % 3 === 0) this._drawMiniWaves();
 	}
@@ -824,7 +857,54 @@ export class Explorer {
 		});
 		const dx = 8 - minX;
 		this._eachNode(root, n => { n._x += dx; });
+		this._applyStoredPositions(root);
 		return (maxX - minX) + 16;
+	}
+	// Stable per-subtree identity = FNV-1a hash of source text + length. Same
+	// subtree text → same fingerprint, so identical subtrees in different
+	// branches share a slot (acceptable for v1 — refine when drag UX exists).
+	// Any source edit invalidates the fingerprint of the changed subtree,
+	// dropping stored positions for that range.
+	_fingerprint(node) {
+		if(!node || !node.text) return '';
+		const t = node.text;
+		let h = 0x811c9dc5;
+		for(let i = 0; i < t.length; i++) {
+			h ^= t.charCodeAt(i);
+			h = (h * 0x01000193) >>> 0;
+		}
+		return h.toString(36) + ':' + t.length;
+	}
+	// Override _x/_y for nodes whose locked position is in the store. Runs
+	// AFTER the canvas-shift so stored coords are absolute (post-shift).
+	_applyStoredPositions(root) {
+		if(this.positionStore.size === 0) return;
+		this._eachNode(root, n => {
+			const stored = this.positionStore.get(this._fingerprint(n));
+			if(stored && stored.locked) {
+				n._x = stored.x;
+				n._y = stored.y;
+				n._restored = true;
+			}
+		});
+	}
+	// Public API for Phase G drag: persist a user-placed node position.
+	setManualPosition(node, x, y) {
+		this.positionStore.set(this._fingerprint(node), { x, y, locked: true });
+		this._savePositionStore();
+	}
+	_loadPositionStore() {
+		try {
+			const raw = localStorage.getItem('coderadio.explorer.positions');
+			if(!raw) return new Map();
+			return new Map(JSON.parse(raw));
+		} catch(_) { return new Map(); }
+	}
+	_savePositionStore() {
+		try {
+			localStorage.setItem('coderadio.explorer.positions',
+				JSON.stringify([...this.positionStore]));
+		} catch(_) { /* private mode etc. */ }
 	}
 	_buchheimInit(node, parent) {
 		node._prelim = 0;

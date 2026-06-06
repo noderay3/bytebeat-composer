@@ -33,6 +33,43 @@ const explorerHighlightField = StateField.define({
 	provide: f => EditorView.decorations.from(f)
 });
 
+// Effect/field for live activity highlight — the explorer's live monitor
+// pushes the current set of "active" source ranges every animation frame.
+// Mirrors Strudel's mini-notation highlight pattern: anchored ranges survive
+// user edits via CodeMirror's automatic Decoration remapping, and a derived
+// outline decoration is painted from the active set. Color comes from the
+// same HSL mapping the tree node uses, so the editor + tree pulse together.
+const setActiveRanges = StateEffect.define();
+const activeRangesField = StateField.define({
+	create() {
+		return Decoration.none;
+	},
+	update(deco, tr) {
+		deco = deco.map(tr.changes);
+		for(const e of tr.effects) {
+			if(e.is(setActiveRanges)) {
+				const ranges = e.value || [];
+				if(ranges.length === 0) {
+					deco = Decoration.none;
+				} else {
+					// Sort by from + length — Decoration.set wants ascending order.
+					const sorted = ranges
+						.filter(r => r && r.from < r.to)
+						.sort((a, b) => a.from - b.from || a.to - b.to);
+					deco = Decoration.set(sorted.map(r =>
+						Decoration.mark({
+							class: 'cm-explorer-active',
+							attributes: { style: `outline:1.5px solid ${ r.color || '#4af' };outline-offset:-1px;border-radius:2px;` }
+						}).range(r.from, r.to)
+					), true);
+				}
+			}
+		}
+		return deco;
+	},
+	provide: f => EditorView.decorations.from(f)
+});
+
 const editorView = initValue => new EditorView({
 	parent: document.getElementById('editor-container'),
 	state: EditorState.create({
@@ -51,6 +88,7 @@ const editorView = initValue => new EditorView({
 					}
 				}
 			}),
+			activeRangesField,
 			explorerHighlightField,
 			foldGutter(),
 			highlightActiveLine(),
@@ -131,5 +169,15 @@ export class Editor {
 			return;
 		}
 		this.view.dispatch({ effects: setExplorerHighlight.of(null) });
+	}
+	// Push a set of currently-active source ranges to the editor — the
+	// Strudel-style live highlight. `ranges` is an array of {from, to, color}.
+	setActiveRanges(ranges) {
+		if(!this.view) return;
+		this.view.dispatch({ effects: setActiveRanges.of(ranges) });
+	}
+	clearActiveRanges() {
+		if(!this.view) return;
+		this.view.dispatch({ effects: setActiveRanges.of([]) });
 	}
 }
