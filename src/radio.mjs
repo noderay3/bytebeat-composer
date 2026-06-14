@@ -143,11 +143,16 @@ export class Radio {
 
 	/// Strip the track down to the fields the rating store needs to play
 	/// it back later — keeps localStorage compact for big libraries.
+	/// codeFile / codeType are preserved for file-based library entries
+	/// (the upstream library stores big tracks in data/songs/<type>/<hash>.js
+	/// rather than inline).
 	_slimTrack(track) {
 		if(!track) return null;
 		return {
 			hash:        track.hash || null,
 			code:        track.code || '',
+			codeFile:    track.codeFile || null,
+			codeType:    track.codeType || null,
 			author:      track.author || '',
 			description: track.description || track.name || '',
 			mode:        track.mode || 'Bytebeat',

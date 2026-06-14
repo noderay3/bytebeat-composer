@@ -150,16 +150,30 @@ export class TrackList {
 		const hash = entry.dataset.hash;
 		if(!hash) return; // upstream songs-block etc.
 
-		// Build the track metadata.
+		// Build the track metadata. Two flavors exist in the composer's
+		// library: inline (the .code-text button contains the code text)
+		// and file-based (no .code-text; code lives at
+		// data/songs/<type>/<hash>.js and is fetched on demand by the
+		// upstream's onclickCodeLoadButton). Capture both shapes so the
+		// radio's Next/Prev / Favorites click can play either.
 		const codeBtn = entry.querySelector('.code-text');
-		let track = { hash, code: '', mode: 'Bytebeat', sampleRate: 8000, author: '', description: '' };
-		if(codeBtn) {
-			track.code = codeBtn.innerText || '';
+		const fileBtn = entry.querySelector('.code-load[data-code-file]');
+		let track = { hash, code: '', codeFile: null, codeType: null,
+			mode: 'Bytebeat', sampleRate: 8000, author: '', description: '' };
+		const songdataBtn = codeBtn || fileBtn;
+		if(songdataBtn && songdataBtn.dataset.songdata) {
 			try {
-				const d = JSON.parse(codeBtn.dataset.songdata || '{}');
+				const d = JSON.parse(songdataBtn.dataset.songdata);
 				if(d.mode) track.mode = d.mode;
 				if(d.sampleRate) track.sampleRate = d.sampleRate;
 			} catch(_) {}
+		}
+		if(codeBtn) {
+			track.code = codeBtn.innerText || '';
+		}
+		if(fileBtn) {
+			track.codeFile = fileBtn.dataset.codeFile;
+			track.codeType = fileBtn.dataset.type || 'minified';
 		}
 		// Author + description: walk up to the songs-block for author and
 		// look for an inline <span>by <b>author</b></span> inside the entry.

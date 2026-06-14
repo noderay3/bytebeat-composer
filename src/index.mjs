@@ -15,16 +15,38 @@ const radio = new Radio();
 const scope = new Scope();
 const ui = new UI();
 const visualizer = new Visualizer();
-const trackList = new TrackList(radio, track => {
-	// User clicked a row in the Favorites list → sync radio cursor + play.
-	// setCurrent moves the sequential cursor so subsequent Next picks up
-	// from this track.
-	radio.setCurrent(track);
+/// Load a track via the bytebeat composer, fetching its code from
+/// data/songs/<type>/<hash>.js if it's a file-based library entry
+/// (no inline code in the upstream library HTML). Without this fetch
+/// step, Next/Prev would silently load empty code for file-based
+/// entries — which is exactly the bug a user hit after the 3rd track,
+/// where the 4th turned out to be file-based.
+async function radioLoadAndPlay(track) {
+	if(!track) return;
+	let code = track.code;
+	if(!code && track.codeFile) {
+		try {
+			const type = track.codeType || 'minified';
+			const url = `./data/songs/${ type }/${ track.codeFile }`;
+			const res = await fetch(url);
+			code = await res.text();
+		} catch(e) {
+			console.error('[radio] failed to fetch track file:', e);
+			return;
+		}
+	}
+	if(!code) return;
 	globalThis.bytebeat.loadCode({
-		code: track.code,
+		code,
 		sampleRate: track.sampleRate || 8000,
 		mode: track.mode || 'Bytebeat',
 	});
+}
+
+const trackList = new TrackList(radio, track => {
+	// User clicked a row in the Favorites list → sync radio cursor + play.
+	radio.setCurrent(track);
+	radioLoadAndPlay(track);
 });
 // The radio's "universe" of tracks is whatever the composer's library
 // has surfaced so far (TrackList watches every library container with a
@@ -282,11 +304,7 @@ globalThis.bytebeat = new class {
 	radioAdvance(dir) {
 		const track = dir > 0 ? radio.next() : radio.previous();
 		if(!track) return;	// stop / disable would go here if we surface it
-		this.loadCode({
-			code: track.code,
-			sampleRate: track.sampleRate || 8000,
-			mode: track.mode || 'Bytebeat',
-		});
+		radioLoadAndPlay(track);	// fetches file-based code if needed
 	}
 
 	/// Bridge composer library clicks → radio.currentTrack. The user clicked
