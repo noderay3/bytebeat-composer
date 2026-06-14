@@ -16,7 +16,7 @@ const scope = new Scope();
 const ui = new UI();
 const visualizer = new Visualizer();
 const trackList = new TrackList(radio, track => {
-	// User clicked a row in the curated list → sync radio cursor + play.
+	// User clicked a row in the Favorites list → sync radio cursor + play.
 	// setCurrent moves the sequential cursor so subsequent Next picks up
 	// from this track.
 	radio.setCurrent(track);
@@ -26,6 +26,10 @@ const trackList = new TrackList(radio, track => {
 		mode: track.mode || 'Bytebeat',
 	});
 });
+// The radio's "universe" of tracks is whatever the composer's library
+// has surfaced so far (TrackList watches every library container with a
+// MutationObserver and records each `.entry` as the user expands it).
+radio.setUniverseProvider(() => trackList.getKnownTracks());
 
 globalThis.bytebeat = new class {
 	constructor() {
@@ -123,10 +127,6 @@ globalThis.bytebeat = new class {
 				radio.toggleMode('lockFavorites');
 				this._syncRadioToolbar();
 				break;
-			case 'control-repeat':
-				radio.toggleMode('repeat');
-				this._syncRadioToolbar();
-				break;
 			case 'control-viz': visualizer.toggle(); break;
 			case 'control-viz-next': visualizer.nextPreset(); break;
 			case 'control-rec': this.toggleRecording(); break;
@@ -220,23 +220,25 @@ globalThis.bytebeat = new class {
 		this.editor = editor;
 		this.legend = legend;
 		legend.initElements();
-		// Radio core — async-loads the curated track JSON. UI wiring (track
-		// list panel, Next/Prev/Shuffle/Lock/Repeat toolbar buttons) is
-		// added in Phase 2; here we just kick off the load so `radio.tracks`
-		// is populated by the time the UI hooks in.
+		// Radio core — the universe is the composer's existing library
+		// entries (captured by TrackList's MutationObserver as the user
+		// expands each library section). Favorites + ratings persist to
+		// localStorage with their metadata, so the Favorites panel works
+		// regardless of which libraries the user has loaded.
 		this.radio = radio;
 		this.trackList = trackList;
 		this.visualizer = visualizer;
 		trackList.initElements();
 		visualizer.initElements();
 		this._syncRadioToolbar();
-		radio.load()
-			.then(() => this._syncRadioToolbar())
-			.catch(e => console.error('radio.load failed:', e.message, e.stack));
+		// Try to resume the last-played track (no-op if its source library
+		// hasn't been opened yet).
+		radio.restoreLastTrack();
 	}
 
 	/// Next / Prev clicks → ask radio for the next track in the active list
-	/// (sequential or shuffle, lock + repeat respected), then load + play.
+	/// (sequential or shuffle, lock-favorites respected; sequential wraps
+	/// end-to-start since there's no Repeat button). Then load + play.
 	/// dir is +1 (next) or -1 (previous).
 	radioAdvance(dir) {
 		const track = dir > 0 ? radio.next() : radio.previous();
@@ -256,7 +258,6 @@ globalThis.bytebeat = new class {
 		};
 		apply('control-shuffle',  radio.modes.shuffle);
 		apply('control-lock-fav', radio.modes.lockFavorites);
-		apply('control-repeat',   radio.modes.repeat);
 		ui.initElements();
 		scope.initElements();
 		library.initElements();

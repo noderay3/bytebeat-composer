@@ -119,7 +119,6 @@
 					<button id="control-next-track" class="control-button" title="Next track">⏭</button>
 					<button id="control-shuffle" class="control-button" title="Shuffle: weighted-random next">🔀</button>
 					<button id="control-lock-fav" class="control-button" title="Lock to favorites only">⭐🔒</button>
-					<button id="control-repeat" class="control-button" title="Repeat: wrap end-of-list back to start">🔁</button>
 					<button id="control-viz" class="control-button" title="Visualizer (Butterchurn / Milkdrop)">👁</button>
 					<button id="control-viz-next" class="control-button" title="Next visualizer preset">🎲</button>
 				</div>
@@ -139,6 +138,14 @@
 			</div>
 		</section>
 		<section id="container-scroll">
+			<details class="library-content" id="coderadio-favorites-library" open>
+				<summary class="library-header">
+					<h1>⭐ Favorites</h1> &ndash; your starred tracks (<span id="coderadio-fav-count">0</span>)
+				</summary>
+				<div class="library-container coderadio-fav-container">
+					<div id="coderadio-fav-list" class="coderadio-track-list"></div>
+				</div>
+			</details>
 			<details class="library-content">
 				<summary class="library-header">
 					<h1>Info</h1> &ndash; about bytebeat
@@ -189,19 +196,6 @@
 						<p>This project is made by SthephanShi, and is a fork of <a href="http://entropedia.co.uk/generative_music/" target="_blank">8-bit Generative Composer by Paul Hayes</a>.</p>
 					</section>
 				</article>
-			</details>
-			<details class="library-content" id="coderadio-library" open>
-				<summary class="library-header">
-					<h1>CodeRadio</h1> &ndash; curated tracks (<span id="coderadio-count">…</span>)
-				</summary>
-				<div id="coderadio-library-body" class="library-container coderadio-library-container">
-					<details class="coderadio-favorites" id="coderadio-fav-section" open>
-						<summary class="coderadio-fav-header">⭐ Favorites (<span id="coderadio-fav-count">0</span>)</summary>
-						<div id="coderadio-fav-list" class="coderadio-track-list"></div>
-					</details>
-					<div class="coderadio-all-header">All tracks</div>
-					<div id="coderadio-all-list" class="coderadio-track-list"></div>
-				</div>
 			</details>
 			<details class="library-content">
 				<summary class="library-header">

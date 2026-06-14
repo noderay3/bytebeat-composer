@@ -174,7 +174,9 @@ export class Library {
 			str += `<button class="code-text code-text-orig${ codeMin ? ' hidden' : '' }"${
 				sData }>${ this.escapeHTML(code) }</button>`;
 		}
-		return `<div class="entry">${ str }</div>`;
+		// data-hash is consumed by the radio module (src/radio.mjs +
+		// src/track-list.mjs) to inject rating / favorite chips per row.
+		return `<div class="entry" data-hash="${ hash || '' }">${ str }</div>`;
 	}
 	initElements() {
 		this.cacheParentElem = document.createElement('div');
