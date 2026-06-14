@@ -5,6 +5,7 @@ import { Radio } from './radio.mjs';
 import { Scope } from './scope.mjs';
 import { TrackList } from './track-list.mjs';
 import { UI } from './ui.mjs';
+import { Visualizer } from './visualizer.mjs';
 import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
 
 const editor = new Editor();
@@ -13,6 +14,7 @@ const library = new Library();
 const radio = new Radio();
 const scope = new Scope();
 const ui = new UI();
+const visualizer = new Visualizer();
 const trackList = new TrackList(radio, track => {
 	// User clicked a row in the curated list → sync radio cursor + play.
 	// setCurrent moves the sequential cursor so subsequent Next picks up
@@ -125,6 +127,8 @@ globalThis.bytebeat = new class {
 				radio.toggleMode('repeat');
 				this._syncRadioToolbar();
 				break;
+			case 'control-viz': visualizer.toggle(); break;
+			case 'control-viz-next': visualizer.nextPreset(); break;
 			case 'control-rec': this.toggleRecording(); break;
 			case 'control-reset': this.resetTime(); break;
 			case 'control-scale': this.resetScopeAdjustment(); break;
@@ -222,7 +226,9 @@ globalThis.bytebeat = new class {
 		// is populated by the time the UI hooks in.
 		this.radio = radio;
 		this.trackList = trackList;
+		this.visualizer = visualizer;
 		trackList.initElements();
+		visualizer.initElements();
 		this._syncRadioToolbar();
 		radio.load()
 			.then(() => this._syncRadioToolbar())
@@ -326,6 +332,10 @@ globalThis.bytebeat = new class {
 		this.audioWorkletNode.port.start();
 		this.audioWorkletNode.connect(this.audioGain);
 		this.audioWorkletNode.connect(analyserGain);
+		// Hook Butterchurn to the audio output, now that the AudioContext +
+		// worklet exist. If the user has the viz toggled on (preference
+		// persisted), this will kick off the render loop immediately.
+		visualizer.attachAudio(this.audioCtx, this.audioWorkletNode);
 		// Recorder for recording audio files
 		const mediaDest = this.audioCtx.createMediaStreamDestination();
 		const audioRecorder = this.audioRecorder = new MediaRecorder(mediaDest.stream);

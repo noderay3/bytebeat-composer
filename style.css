@@ -2436,3 +2436,31 @@ button[name="close"] {
 	border-color: #ffd28a;
 }
 
+/* ============================================================
+ * Butterchurn visualizer overlay
+ * ============================================================ */
+
+/* The visualizer canvas overlays the oscilloscope inside #canvas-container.
+ * Hidden by default; .is-active fades it in over the scope. */
+#coderadio-viz-canvas {
+	position: absolute;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	display: none;
+	pointer-events: none;
+	z-index: 1;
+}
+#coderadio-viz-canvas.is-active {
+	display: block;
+}
+/* When the viz is active, fade the oscilloscope so the milkdrop shows. */
+#coderadio-viz-canvas.is-active ~ #canvas-main {
+	opacity: 0.2;
+}
+/* Sibling-selector reversed (older browsers); both paths covered. */
+#canvas-container:has(#coderadio-viz-canvas.is-active) #canvas-main {
+	opacity: 0.2;
+}
+

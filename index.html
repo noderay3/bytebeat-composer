@@ -11,6 +11,11 @@
 	<link rel="shortcut icon" href="favicon.png">
 	<link rel="stylesheet" type="text/css" href="style.css?version=2025121200">
 	<link rel="modulepreload" href="./build/audio-processor.mjs?version=2025121200">
+	<!-- Butterchurn (Milkdrop visualizer) — UMD bundles. Loaded before our
+	     main bundle so window.butterchurn / window.butterchurnPresetsMinimal
+	     are available when src/visualizer.mjs runs. -->
+	<script src="./vendor/butterchurn.min.js"></script>
+	<script src="./vendor/butterchurnPresetsMinimal.min.js"></script>
 	<script type="module" async src="./build/index.js?version=2025121200"></script>
 	<script src="./build/theme.js?version=2025121200"></script>
 </head>
@@ -115,6 +120,8 @@
 					<button id="control-shuffle" class="control-button" title="Shuffle: weighted-random next">🔀</button>
 					<button id="control-lock-fav" class="control-button" title="Lock to favorites only">⭐🔒</button>
 					<button id="control-repeat" class="control-button" title="Repeat: wrap end-of-list back to start">🔁</button>
+					<button id="control-viz" class="control-button" title="Visualizer (Butterchurn / Milkdrop)">👁</button>
+					<button id="control-viz-next" class="control-button" title="Next visualizer preset">🎲</button>
 				</div>
 				<div class="controls-group controls-grow">
 					<input id="control-volume" type="range" min="0" max="1" value=".5" step="any" title="Volume">
@@ -123,6 +130,7 @@
 			<pre id="error"></pre>
 			<div id="canvas-container" title="Click to play">
 				<canvas id="canvas-main" width="1024" height="256" aria-label="Oscillioscope"></canvas>
+				<canvas id="coderadio-viz-canvas" aria-label="Visualizer"></canvas>
 				<div id="canvas-timecursor"></div>
 				<div id="canvas-play" class="canvas-initial canvas-play">
 					<svg id="svg-canvas-play"><use xlink:href="#symbol-play"></use></svg>

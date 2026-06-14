@@ -32,6 +32,8 @@
 		"@codemirror/state": "^6.5.2",
 		"@codemirror/view": "^6.36.5",
 		"@lezer/highlight": "^1.2.1",
+		"butterchurn": "^2.6.7",
+		"butterchurn-presets": "^2.4.7",
 		"pako": "^2.1.0"
 	}
 }
