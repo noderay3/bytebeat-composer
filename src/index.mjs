@@ -1,6 +1,7 @@
 import { Editor } from './editor.mjs';
 import { Legend } from './legend.mjs';
 import { Library } from './library.mjs';
+import { Radio } from './radio.mjs';
 import { Scope } from './scope.mjs';
 import { UI } from './ui.mjs';
 import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
@@ -8,6 +9,7 @@ import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
 const editor = new Editor();
 const legend = new Legend();
 const library = new Library();
+const radio = new Radio();
 const scope = new Scope();
 const ui = new UI();
 
@@ -188,6 +190,12 @@ globalThis.bytebeat = new class {
 		this.editor = editor;
 		this.legend = legend;
 		legend.initElements();
+		// Radio core — async-loads the curated track JSON. UI wiring (track
+		// list panel, Next/Prev/Shuffle/Lock/Repeat toolbar buttons) is
+		// added in Phase 2; here we just kick off the load so `radio.tracks`
+		// is populated by the time the UI hooks in.
+		this.radio = radio;
+		radio.load().catch(e => console.error('radio.load failed:', e.message, e.stack));
 		ui.initElements();
 		scope.initElements();
 		library.initElements();
