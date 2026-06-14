@@ -1,12 +1,12 @@
 import { Editor } from './editor.mjs';
-import { Explorer } from './explorer.mjs';
+import { Legend } from './legend.mjs';
 import { Library } from './library.mjs';
 import { Scope } from './scope.mjs';
 import { UI } from './ui.mjs';
 import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
 
 const editor = new Editor();
-const explorer = new Explorer();
+const legend = new Legend();
 const library = new Library();
 const scope = new Scope();
 const ui = new UI();
@@ -90,12 +90,9 @@ globalThis.bytebeat = new class {
 			case 'control-counter':
 			case 'control-pause': this.playbackToggle(false); break;
 			case 'control-expand': ui.expandEditor(); break;
-			case 'control-explore':
-			case 'explorer-handle':
-				explorer.toggle(editor.value);
-				break;
-			case 'explorer-solo':
-				explorer.preSoloSource === null ? explorer.soloSelected() : explorer.unsolo();
+			case 'control-legend':
+			case 'legend-handle':
+				legend.toggle();
 				break;
 			case 'control-link': ui.copyLink(); break;
 			case 'control-play-backward': this.playbackToggle(true, true, -1); break;
@@ -186,11 +183,11 @@ globalThis.bytebeat = new class {
 	}
 	initAfterDom() {
 		editor.init();
-		// Expose editor + explorer on the global. The editor exposure lets the
-		// explorer paint hover-highlight Marks; both also help devtools poking.
+		// Expose editor + legend on the global so devtools can poke around
+		// and so callers (e.g. legend "Try" buttons) reach the editor.
 		this.editor = editor;
-		this.explorer = explorer;
-		explorer.initElements();
+		this.legend = legend;
+		legend.initElements();
 		ui.initElements();
 		scope.initElements();
 		library.initElements();
@@ -574,11 +571,6 @@ globalThis.bytebeat = new class {
 		this.mode = mode;
 		this.updateUrl();
 		this.sendData({ mode, setFunction: editor.value });
-		// Refresh the explorer's synthetic output node, which describes
-		// the current mode (8-bit unsigned vs signed vs floatbeat).
-		if(this.explorer && this.explorer.isOpen) {
-			this.explorer.render(editor.value);
-		}
 	}
 	setSampleRate(sampleRate, isSendData = true) {
 		if(!sampleRate || !isFinite(sampleRate) ||
@@ -616,11 +608,6 @@ globalThis.bytebeat = new class {
 			}
 			this.updateUrl();
 			this.sendData(data);
-		}
-		// Refresh the explorer's period / Hz numbers, which depend on
-		// the current sample rate.
-		if(this.explorer && this.explorer.isOpen) {
-			this.explorer.render(editor.value);
 		}
 	}
 	setScale(amount, buttonElem) {
