@@ -174,6 +174,11 @@ export class Explorer {
 		// is { x, y, locked }. Persisted to localStorage so manually-dragged
 		// node positions (Phase G) survive across edits and reloads.
 		this.positionStore = this._loadPositionStore();
+		// Collapse store — Set of subtree fingerprints whose children are
+		// hidden from layout + render. Click on a non-leaf node toggles
+		// membership. Persisted so collapse state survives edits (where the
+		// same fingerprint reappears) and reloads.
+		this.collapseStore = this._loadCollapseStore();
 		// Viewport transform applied to a <g> inside the SVG. tx/ty in the
 		// SVG's pixel coordinate space; scale is dimensionless.
 		this.tx = 0;
@@ -392,9 +397,20 @@ export class Explorer {
 			return;
 		}
 		this.selectedId = id;
-		// Click only shows detail. Layout-changing collapse on click was
-		// confusing — the tree shifted under the user's pointer.
-		this.showDetail(node);
+		// Plain click on a collapsable subtree → toggle collapse (hide its
+		// children from layout + render). Shift-click → always show detail
+		// (preserves the prior behavior for power users who want detail
+		// without losing layout context). Click on a true visual leaf →
+		// show detail (nothing to collapse). Graph mode bypasses collapse
+		// entirely since the graph layout doesn't honor it.
+		const collapsable = !this.useGraph
+			&& node.children.length > 0
+			&& !isLeafShape(node);
+		if(e.shiftKey || !collapsable) {
+			this.showDetail(node);
+			return;
+		}
+		this._toggleCollapse(node);
 	}
 	showDetail(node) {
 		if(!this.detail) {
@@ -737,6 +753,9 @@ export class Explorer {
 		}
 		this.empty.classList.add('hidden');
 		this.assignIds(tree, { n: 0 });
+		// Restore persisted collapse state before any layout sees the tree —
+		// isVisualLeaf gates Buchheim on _collapsed.
+		this._applyCollapseStore(tree);
 
 		if (this.useGraph && this.graph && this.graph.nodes.size > 0) {
 			// ── Graph-driven layout ──────────────────────────────
@@ -837,6 +856,11 @@ export class Explorer {
 	// `t & literal`, which we display as a single gray box matching their
 	// source text instead of drilling into a 3-node subtree.
 	isVisualLeaf(node) {
+		// `_collapsed` short-circuits every layout/render traversal that gates
+		// on isVisualLeaf — Buchheim helpers stop at this node, draw() emits
+		// the box without recursing into children, _eachNode stops walking.
+		// Net effect: collapsed subtrees are completely invisible to layout.
+		if(node._collapsed) return true;
 		return node.children.length === 0 || isLeafShape(node);
 	}
 	// Buchheim tidy-tree layout — linear time, minimum width, no overlapping
@@ -905,6 +929,83 @@ export class Explorer {
 			localStorage.setItem('coderadio.explorer.positions',
 				JSON.stringify([...this.positionStore]));
 		} catch(_) { /* private mode etc. */ }
+	}
+	_loadCollapseStore() {
+		try {
+			const raw = localStorage.getItem('coderadio.explorer.collapsed');
+			if(!raw) return new Set();
+			return new Set(JSON.parse(raw));
+		} catch(_) { return new Set(); }
+	}
+	_saveCollapseStore() {
+		try {
+			localStorage.setItem('coderadio.explorer.collapsed',
+				JSON.stringify([...this.collapseStore]));
+		} catch(_) { /* private mode etc. */ }
+	}
+	// Walk every node in the tree (NOT short-circuiting on collapse) and set
+	// `_collapsed` from the persisted store. Must run after assignIds and
+	// before measure/layout so Buchheim sees the correct visual-leaf set.
+	_applyCollapseStore(root) {
+		const walk = n => {
+			n._collapsed = this.collapseStore.has(this._fingerprint(n));
+			for(const c of n.children) walk(c);
+		};
+		walk(root);
+	}
+	_countDescendants(node) {
+		let n = 0;
+		for(const c of node.children) {
+			n += 1 + this._countDescendants(c);
+		}
+		return n;
+	}
+	// Flip a node's collapse state and redraw the tree (no re-parse, no
+	// detail-panel reset). Persisted by fingerprint so the same subtree text
+	// stays collapsed across edits.
+	_toggleCollapse(node) {
+		const fp = this._fingerprint(node);
+		if(this.collapseStore.has(fp)) {
+			this.collapseStore.delete(fp);
+			node._collapsed = false;
+		} else {
+			this.collapseStore.add(fp);
+			node._collapsed = true;
+		}
+		this._saveCollapseStore();
+		this._redrawTree();
+	}
+	// Redraw `this.lastTree` after a collapse toggle, reusing the cached
+	// parse. Mirrors the tree-driven branch of render() but skips the
+	// re-parse, the selection clear, the detail-panel hide, and the
+	// auto-fit (keeps the user's current pan/zoom).
+	_redrawTree() {
+		if(!this.lastTree || !this.svg || this.useGraph) return;
+		this.svg.replaceChildren();
+		this.byId.clear();
+		this.assignIds(this.lastTree, { n: 0 });
+		this._applyCollapseStore(this.lastTree);
+		this.measure(this.lastTree);
+		const treeDepth = this.depth(this.lastTree);
+		const showVoices = this.lastTree.kind === 'BinaryExpression'
+			&& this.lastTree.op === '+'
+			&& this.lastTree.children.length >= 2;
+		const top = LANE_LABEL_HEIGHT + 4;
+		const rootY = top + treeDepth * (NODE_HEIGHT + LEVEL_GAP);
+		const totalW = this.layout(this.lastTree, rootY);
+		const totalH = rootY + NODE_HEIGHT + OUTPUT_GAP + NODE_HEIGHT + 8;
+		this.treeW = totalW;
+		this.treeH = totalH;
+		this.svg.removeAttribute('viewBox');
+		this.defineMarkers();
+		this.viewport = document.createElementNS(SVG_NS, 'g');
+		this.viewport.setAttribute('class', 'explorer-viewport');
+		this.svg.appendChild(this.viewport);
+		this.draw(this.lastTree);
+		if(showVoices) this.drawVoiceLabels(this.lastTree);
+		this.drawOutputNode(this.lastTree, totalW);
+		this.applyTransform();
+		if(this.isLive) { this.stopLive(); this.startLive(); }
 	}
 	_buchheimInit(node, parent) {
 		node._prelim = 0;
@@ -1082,6 +1183,7 @@ export class Explorer {
 		const g = document.createElementNS(SVG_NS, 'g');
 		const cls = ['explorer-node', `role-${ role }`];
 		if(node._inlined) cls.push('is-inlined');
+		if(node._collapsed) cls.push('is-collapsed');
 		g.setAttribute('class', cls.join(' '));
 		g.setAttribute('data-from', String(node.from));
 		g.setAttribute('data-to', String(node.to));
@@ -1121,6 +1223,17 @@ export class Explorer {
 	// Visual leaves render their full source text on the top line ("t >> 7"
 	// instead of just ">>") since we never expose their interior.
 	labels(node) {
+		const result = this._labelsCore(node);
+		// Collapsed marker — overrides the bottom line so the user always
+		// sees how many descendants are tucked away. `_countDescendants`
+		// walks the AST (NOT the visual-leaf-gated traversal), so the count
+		// reflects the actual hidden subtree size.
+		if(node._collapsed) {
+			result.bottom = `▸ ${ this._countDescendants(node) } hidden`;
+		}
+		return result;
+	}
+	_labelsCore(node) {
 		if(isLeafShape(node) && node.children.length > 0) {
 			return { top: node.text.length > 24 ? node.text.slice(0, 22) + '…' : node.text, bottom: '' };
 		}
