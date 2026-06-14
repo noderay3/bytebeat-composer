@@ -2436,6 +2436,32 @@ button[name="close"] {
 	border-color: #ffd28a;
 }
 
+/* Player-area rating group — acts on the currently-playing track. */
+.coderadio-now-rating .control-button {
+	min-width: 28px;
+	padding: 0 6px;
+	font-size: 13px;
+}
+.coderadio-now-rating .control-button:disabled {
+	opacity: 0.35;
+	cursor: not-allowed;
+}
+.coderadio-now-rating .control-button.is-active {
+	background: linear-gradient(#1a4a30, #0d2818);
+	border-color: #4ec05a;
+	color: #8ae09e;
+}
+.coderadio-now-rating .control-button.is-active.is-down {
+	background: linear-gradient(#4a1a20, #28100d);
+	border-color: #c25a5a;
+	color: #e08a8a;
+}
+.coderadio-now-rating #control-rate-fav.is-active {
+	background: linear-gradient(#4a3820, #28200d);
+	border-color: #ffd28a;
+	color: #ffd28a;
+}
+
 /* ============================================================
  * Butterchurn visualizer overlay
  * ============================================================ */

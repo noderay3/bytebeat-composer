@@ -115,12 +115,17 @@
 					<span id="control-codesize" class="control-text" title="Code size in bytes"></span>
 				</div>
 				<div class="controls-group coderadio-controls">
-					<button id="control-prev-track" class="control-button" title="Previous track (in library order)">⏮</button>
+					<button id="control-prev-track" class="control-button" title="Previous track">⏮</button>
 					<button id="control-next-track" class="control-button" title="Next track">⏭</button>
 					<button id="control-shuffle" class="control-button" title="Shuffle: weighted-random next">🔀</button>
 					<button id="control-lock-fav" class="control-button" title="Lock to favorites only">⭐🔒</button>
 					<button id="control-viz" class="control-button" title="Visualizer (Butterchurn / Milkdrop)">👁</button>
 					<button id="control-viz-next" class="control-button" title="Next visualizer preset">🎲</button>
+				</div>
+				<div class="controls-group coderadio-now-rating" id="coderadio-now-rating" title="Rate the currently-playing track">
+					<button id="control-rate-up" class="control-button coderadio-rate-btn" disabled title="Thumbs up — boosts in shuffle">👍</button>
+					<button id="control-rate-down" class="control-button coderadio-rate-btn" disabled title="Thumbs down — never plays">👎</button>
+					<button id="control-rate-fav" class="control-button coderadio-rate-btn" disabled title="Favorite — pin to your list">⭐</button>
 				</div>
 				<div class="controls-group controls-grow">
 					<input id="control-volume" type="range" min="0" max="1" value=".5" step="any" title="Volume">

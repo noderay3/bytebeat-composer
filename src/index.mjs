@@ -129,6 +129,15 @@ globalThis.bytebeat = new class {
 				break;
 			case 'control-viz': visualizer.toggle(); break;
 			case 'control-viz-next': visualizer.nextPreset(); break;
+			case 'control-rate-up':
+				if(radio.currentTrack) radio.setRating(radio.currentTrack, 'up');
+				break;
+			case 'control-rate-down':
+				if(radio.currentTrack) radio.setRating(radio.currentTrack, 'down');
+				break;
+			case 'control-rate-fav':
+				if(radio.currentTrack) radio.toggleFavorite(radio.currentTrack);
+				break;
 			case 'control-rec': this.toggleRecording(); break;
 			case 'control-reset': this.resetTime(); break;
 			case 'control-scale': this.resetScopeAdjustment(); break;
@@ -141,10 +150,14 @@ globalThis.bytebeat = new class {
 			default:
 				switch(true) {
 				case classList.contains('code-text'):
+					this._radioMarkFromEntry(elem);
 					this.loadCode(Object.assign({ code: elem.innerText },
 						elem.hasAttribute('data-songdata') ? JSON.parse(elem.dataset.songdata) : {}));
 					break;
-				case classList.contains('code-load'): library.onclickCodeLoadButton(elem); break;
+				case classList.contains('code-load'):
+					this._radioMarkFromEntry(elem);
+					library.onclickCodeLoadButton(elem);
+					break;
 				case classList.contains('code-remix-load'): library.onclickRemixLoadButton(elem); break;
 				case classList.contains('library-header'): library.onclickLibraryHeader(elem); break;
 				case elem.parentNode.classList.contains('library-header'):
@@ -231,9 +244,35 @@ globalThis.bytebeat = new class {
 		trackList.initElements();
 		visualizer.initElements();
 		this._syncRadioToolbar();
+		// Keep the player-area rating chips in sync with the current track's
+		// state — on 'current' (a new track loaded) or 'rating' (chip
+		// clicked, either from the player or from a library row).
+		radio.subscribe(ev => {
+			if(ev.type === 'current' || ev.type === 'rating') this._syncNowRating();
+		});
+		this._syncNowRating();
 		// Try to resume the last-played track (no-op if its source library
 		// hasn't been opened yet).
 		radio.restoreLastTrack();
+	}
+
+	_syncNowRating() {
+		const cur = radio.currentTrack;
+		const up   = document.getElementById('control-rate-up');
+		const down = document.getElementById('control-rate-down');
+		const fav  = document.getElementById('control-rate-fav');
+		if(!up || !down || !fav) return;
+		const disabled = !cur;
+		[up, down, fav].forEach(b => b.disabled = disabled);
+		if(!cur) {
+			[up, down, fav].forEach(b => b.classList.remove('is-active', 'is-down'));
+			return;
+		}
+		const r = radio.getRating(cur.hash || cur.code);
+		up.classList.toggle('is-active', r.rating === 'up');
+		down.classList.toggle('is-active', r.rating === 'down');
+		down.classList.toggle('is-down', r.rating === 'down');
+		fav.classList.toggle('is-active', r.favorite);
 	}
 
 	/// Next / Prev clicks → ask radio for the next track in the active list
@@ -248,6 +287,18 @@ globalThis.bytebeat = new class {
 			sampleRate: track.sampleRate || 8000,
 			mode: track.mode || 'Bytebeat',
 		});
+	}
+
+	/// Bridge composer library clicks → radio.currentTrack. The user clicked
+	/// a code-text or code-load button inside a `.entry`; walk up to the
+	/// entry, read its data-hash, look up the track metadata in trackList's
+	/// universe, and tell the radio so the player-area rating chips and
+	/// sequential cursor know what's playing.
+	_radioMarkFromEntry(elem) {
+		const entry = elem.closest('.entry');
+		if(!entry || !entry.dataset.hash) return;
+		const track = trackList.universe.get(entry.dataset.hash);
+		if(track) radio.setCurrent(track);
 	}
 
 	/// Mirror the toolbar mode buttons' `.is-active` class from radio.modes.
