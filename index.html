@@ -109,6 +109,13 @@
 					<button id="control-legend" class="control-button" title="Open bytebeat reference">ref</button>
 					<span id="control-codesize" class="control-text" title="Code size in bytes"></span>
 				</div>
+				<div class="controls-group coderadio-controls">
+					<button id="control-prev-track" class="control-button" title="Previous track (in library order)">⏮</button>
+					<button id="control-next-track" class="control-button" title="Next track">⏭</button>
+					<button id="control-shuffle" class="control-button" title="Shuffle: weighted-random next">🔀</button>
+					<button id="control-lock-fav" class="control-button" title="Lock to favorites only">⭐🔒</button>
+					<button id="control-repeat" class="control-button" title="Repeat: wrap end-of-list back to start">🔁</button>
+				</div>
 				<div class="controls-group controls-grow">
 					<input id="control-volume" type="range" min="0" max="1" value=".5" step="any" title="Volume">
 				</div>
@@ -174,6 +181,19 @@
 						<p>This project is made by SthephanShi, and is a fork of <a href="http://entropedia.co.uk/generative_music/" target="_blank">8-bit Generative Composer by Paul Hayes</a>.</p>
 					</section>
 				</article>
+			</details>
+			<details class="library-content" id="coderadio-library" open>
+				<summary class="library-header">
+					<h1>CodeRadio</h1> &ndash; curated tracks (<span id="coderadio-count">…</span>)
+				</summary>
+				<div id="coderadio-library-body" class="library-container coderadio-library-container">
+					<details class="coderadio-favorites" id="coderadio-fav-section" open>
+						<summary class="coderadio-fav-header">⭐ Favorites (<span id="coderadio-fav-count">0</span>)</summary>
+						<div id="coderadio-fav-list" class="coderadio-track-list"></div>
+					</details>
+					<div class="coderadio-all-header">All tracks</div>
+					<div id="coderadio-all-list" class="coderadio-track-list"></div>
+				</div>
 			</details>
 			<details class="library-content">
 				<summary class="library-header">

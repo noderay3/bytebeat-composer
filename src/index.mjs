@@ -3,6 +3,7 @@ import { Legend } from './legend.mjs';
 import { Library } from './library.mjs';
 import { Radio } from './radio.mjs';
 import { Scope } from './scope.mjs';
+import { TrackList } from './track-list.mjs';
 import { UI } from './ui.mjs';
 import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
 
@@ -12,6 +13,17 @@ const library = new Library();
 const radio = new Radio();
 const scope = new Scope();
 const ui = new UI();
+const trackList = new TrackList(radio, track => {
+	// User clicked a row in the curated list → sync radio cursor + play.
+	// setCurrent moves the sequential cursor so subsequent Next picks up
+	// from this track.
+	radio.setCurrent(track);
+	globalThis.bytebeat.loadCode({
+		code: track.code,
+		sampleRate: track.sampleRate || 8000,
+		mode: track.mode || 'Bytebeat',
+	});
+});
 
 globalThis.bytebeat = new class {
 	constructor() {
@@ -99,6 +111,20 @@ globalThis.bytebeat = new class {
 			case 'control-link': ui.copyLink(); break;
 			case 'control-play-backward': this.playbackToggle(true, true, -1); break;
 			case 'control-play-forward': this.playbackToggle(true, true, 1); break;
+			case 'control-next-track': this.radioAdvance(1); break;
+			case 'control-prev-track': this.radioAdvance(-1); break;
+			case 'control-shuffle':
+				radio.toggleMode('shuffle');
+				this._syncRadioToolbar();
+				break;
+			case 'control-lock-fav':
+				radio.toggleMode('lockFavorites');
+				this._syncRadioToolbar();
+				break;
+			case 'control-repeat':
+				radio.toggleMode('repeat');
+				this._syncRadioToolbar();
+				break;
 			case 'control-rec': this.toggleRecording(); break;
 			case 'control-reset': this.resetTime(); break;
 			case 'control-scale': this.resetScopeAdjustment(); break;
@@ -195,7 +221,36 @@ globalThis.bytebeat = new class {
 		// added in Phase 2; here we just kick off the load so `radio.tracks`
 		// is populated by the time the UI hooks in.
 		this.radio = radio;
-		radio.load().catch(e => console.error('radio.load failed:', e.message, e.stack));
+		this.trackList = trackList;
+		trackList.initElements();
+		this._syncRadioToolbar();
+		radio.load()
+			.then(() => this._syncRadioToolbar())
+			.catch(e => console.error('radio.load failed:', e.message, e.stack));
+	}
+
+	/// Next / Prev clicks → ask radio for the next track in the active list
+	/// (sequential or shuffle, lock + repeat respected), then load + play.
+	/// dir is +1 (next) or -1 (previous).
+	radioAdvance(dir) {
+		const track = dir > 0 ? radio.next() : radio.previous();
+		if(!track) return;	// stop / disable would go here if we surface it
+		this.loadCode({
+			code: track.code,
+			sampleRate: track.sampleRate || 8000,
+			mode: track.mode || 'Bytebeat',
+		});
+	}
+
+	/// Mirror the toolbar mode buttons' `.is-active` class from radio.modes.
+	_syncRadioToolbar() {
+		const apply = (id, on) => {
+			const el = document.getElementById(id);
+			if(el) el.classList.toggle('is-active', !!on);
+		};
+		apply('control-shuffle',  radio.modes.shuffle);
+		apply('control-lock-fav', radio.modes.lockFavorites);
+		apply('control-repeat',   radio.modes.repeat);
 		ui.initElements();
 		scope.initElements();
 		library.initElements();

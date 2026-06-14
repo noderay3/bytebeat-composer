@@ -2293,3 +2293,146 @@ button[name="close"] {
 }
 .legend-gotcha-list strong { color: #ffd28a; }
 
+/* ============================================================
+ * CodeRadio — curated track list + toolbar mode buttons
+ * ============================================================ */
+
+/* Toolbar mode buttons: shuffle / lock-fav / repeat indicate active. */
+.coderadio-controls .control-button {
+	min-width: 28px;
+	padding: 0 6px;
+	font-size: 13px;
+	line-height: 1;
+}
+.coderadio-controls .control-button.is-active {
+	background: linear-gradient(#1a4a30, #0d2818);
+	border-color: #4ec05a;
+	color: #8ae09e;
+	box-shadow: inset 0 0 0 1px #4ec05a44;
+}
+
+/* Library section container — keep the upstream library's outer chrome. */
+.coderadio-library-container {
+	padding: 4px 4px 6px;
+}
+
+/* Favorites pinned section header */
+.coderadio-favorites {
+	margin-bottom: 6px;
+	border-bottom: 1px dashed var(--ctrl-btn-border);
+	padding-bottom: 6px;
+}
+.coderadio-fav-header {
+	cursor: pointer;
+	font: bold 11px sans-serif;
+	color: #ffd28a;
+	padding: 4px 6px;
+	list-style: none;
+}
+.coderadio-fav-header::-webkit-details-marker { display: none; }
+.coderadio-fav-header::before {
+	content: '▸';
+	display: inline-block;
+	width: 12px;
+	color: #c99a4a;
+	transition: transform 120ms ease;
+}
+.coderadio-favorites[open] > .coderadio-fav-header::before { transform: rotate(90deg); }
+
+.coderadio-empty-fav {
+	color: #98a2b3;
+	font: italic 10.5px sans-serif;
+	padding: 8px 12px 4px;
+}
+
+.coderadio-all-header {
+	font: bold 10px sans-serif;
+	color: #98a2b3;
+	letter-spacing: 0.6px;
+	text-transform: uppercase;
+	padding: 4px 6px;
+	margin-top: 4px;
+}
+
+/* Track row */
+.coderadio-track-list {
+	display: flex;
+	flex-direction: column;
+	gap: 1px;
+}
+.coderadio-track {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	padding: 5px 8px;
+	border-radius: 3px;
+	cursor: pointer;
+	background: transparent;
+	transition: background 80ms ease;
+	border-left: 2px solid transparent;
+}
+.coderadio-track:hover {
+	background: rgba(74, 144, 255, 0.08);
+}
+.coderadio-track.is-current {
+	background: rgba(74, 192, 90, 0.12);
+	border-left-color: #4ec05a;
+}
+.coderadio-track-meta {
+	flex: 1 1 auto;
+	min-width: 0;
+}
+.coderadio-track-desc {
+	font: 11px ui-monospace, Menlo, monospace;
+	color: #d4f1ff;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+.coderadio-track-sub {
+	font: 10px sans-serif;
+	color: #98a2b3;
+	display: flex;
+	gap: 8px;
+	margin-top: 1px;
+}
+.coderadio-track-mode {
+	color: #6aa3d8;
+}
+
+/* Rating chips */
+.coderadio-track-actions {
+	display: flex;
+	gap: 2px;
+	flex: 0 0 auto;
+}
+.coderadio-rate, .coderadio-fav {
+	background: transparent;
+	border: 1px solid transparent;
+	border-radius: 3px;
+	padding: 2px 5px;
+	font-size: 12px;
+	cursor: pointer;
+	opacity: 0.35;
+	transition: opacity 120ms ease, background 120ms ease;
+	line-height: 1;
+}
+.coderadio-rate:hover, .coderadio-fav:hover {
+	opacity: 0.9;
+	background: rgba(255, 255, 255, 0.05);
+}
+.coderadio-rate.is-active {
+	opacity: 1;
+	background: rgba(78, 192, 90, 0.18);
+	border-color: #4ec05a;
+}
+.coderadio-rate.is-active.is-down {
+	background: rgba(194, 90, 90, 0.18);
+	border-color: #c25a5a;
+}
+.coderadio-fav.is-active {
+	opacity: 1;
+	background: rgba(255, 210, 138, 0.2);
+	border-color: #ffd28a;
+}
+
