@@ -273,6 +273,22 @@ globalThis.bytebeat = new class {
 			if(ev.type === 'current' || ev.type === 'rating') this._syncNowRating();
 		});
 		this._syncNowRating();
+		// Global spacebar → toggle the Milkdrop visualizer, but only when no
+		// editable element is focused. Mirrors the macOS CodeRadio app's
+		// space-key behavior. CodeMirror's editor area is contenteditable,
+		// so isContentEditable picks it up cleanly.
+		window.addEventListener('keydown', e => {
+			if(e.code !== 'Space' && e.key !== ' ') return;
+			const ae = document.activeElement;
+			const editable = ae && (
+				ae.isContentEditable
+				|| ae.tagName === 'INPUT' && !ae.disabled && !ae.readOnly
+				|| ae.tagName === 'TEXTAREA' && !ae.disabled && !ae.readOnly
+			);
+			if(editable) return;
+			e.preventDefault();
+			visualizer.toggle();
+		});
 		// Try to resume the last-played track (no-op if its source library
 		// hasn't been opened yet).
 		radio.restoreLastTrack();

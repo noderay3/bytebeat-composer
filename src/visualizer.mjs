@@ -38,8 +38,11 @@ export class Visualizer {
 			console.warn('[viz] canvas #coderadio-viz-canvas missing');
 			return;
 		}
-		const hasLib = typeof globalThis.butterchurn !== 'undefined';
-		const hasPresets = typeof globalThis.butterchurnPresetsMinimal !== 'undefined';
+		const bc = (globalThis.butterchurn && globalThis.butterchurn.default) || globalThis.butterchurn;
+		const bcPresets = (globalThis.butterchurnPresetsMinimal && globalThis.butterchurnPresetsMinimal.default)
+			|| globalThis.butterchurnPresetsMinimal;
+		const hasLib     = !!(bc && typeof bc.createVisualizer === 'function');
+		const hasPresets = !!(bcPresets && typeof bcPresets.getPresets === 'function');
 		console.log(`[viz] init — butterchurn:${ hasLib ? 'OK' : 'MISSING' } presets:${ hasPresets ? 'OK' : 'MISSING' }`);
 		try { this.enabled = localStorage.getItem(STORAGE_ENABLED) === '1'; }
 		catch(_) {}
@@ -59,6 +62,8 @@ export class Visualizer {
 
 	toggle() {
 		this.enabled = !this.enabled;
+		console.log('[viz] toggle →', this.enabled ? 'ON' : 'OFF',
+			'(audioContext:', this.audioContext ? 'ready' : 'NOT YET', ')');
 		try { localStorage.setItem(STORAGE_ENABLED, this.enabled ? '1' : '0'); }
 		catch(_) {}
 		this._syncToggleButton();
@@ -81,21 +86,42 @@ export class Visualizer {
 	// --- internals ----------------------------------------------------
 
 	_setup() {
-		if(!this.audioContext || !this.canvas) return;
-		const bc = globalThis.butterchurn;
-		const bcPresets = globalThis.butterchurnPresetsMinimal;
-		if(!bc) {
-			console.error('Visualizer: window.butterchurn not loaded');
+		if(!this.canvas) { console.warn('[viz] _setup: no canvas'); return; }
+		if(!this.audioContext) {
+			console.warn('[viz] _setup: audioContext not ready yet — will retry on attachAudio');
 			return;
 		}
+		// Butterchurn 2.x ships its UMD bundle as `{ default: <api> }` —
+		// the createVisualizer function lives at `.default.createVisualizer`,
+		// not at the top level. butterchurn-presets is shaped differently
+		// (top-level getPresets). Resolve both safely.
+		const bc = (globalThis.butterchurn && globalThis.butterchurn.default) || globalThis.butterchurn;
+		const bcPresets = (globalThis.butterchurnPresetsMinimal && globalThis.butterchurnPresetsMinimal.default)
+			|| globalThis.butterchurnPresetsMinimal;
+		if(!bc || typeof bc.createVisualizer !== 'function') {
+			console.error('[viz] butterchurn.createVisualizer not available', bc);
+			return;
+		}
+		// CRITICAL: make the canvas visible BEFORE measuring its size. While
+		// `display:none`, getBoundingClientRect returns 0×0 and Butterchurn
+		// would init at 0×0 — WebGL state then gets wedged and the
+		// ResizeObserver recovery is too late.
+		this.canvas.classList.add('is-active');
 		if(!this.viz) {
 			this._resizeCanvas();
-			this.viz = bc.createVisualizer(this.audioContext, this.canvas, {
-				width: this.canvas.width,
-				height: this.canvas.height,
-				pixelRatio: window.devicePixelRatio || 1,
-			});
-			this.viz.connectAudio(this.audioNode);
+			console.log('[viz] createVisualizer', this.canvas.width, '×', this.canvas.height);
+			try {
+				this.viz = bc.createVisualizer(this.audioContext, this.canvas, {
+					width: this.canvas.width,
+					height: this.canvas.height,
+					pixelRatio: window.devicePixelRatio || 1,
+				});
+				this.viz.connectAudio(this.audioNode);
+			} catch(e) {
+				console.error('[viz] createVisualizer threw:', e);
+				this.canvas.classList.remove('is-active');
+				return;
+			}
 			// Resize on container changes — Butterchurn's setRendererSize
 			// rebuilds GL state, so debounce.
 			let resizeTimer = 0;
@@ -111,12 +137,13 @@ export class Visualizer {
 		if(!this.presets && bcPresets && typeof bcPresets.getPresets === 'function') {
 			this.presets = bcPresets.getPresets();
 			this.presetNames = Object.keys(this.presets);
+			console.log('[viz] loaded', this.presetNames.length, 'presets');
 		}
 		if(this.presetNames && this.presetNames.length > 0) {
 			this.randomPreset();
 		}
-		this.canvas.classList.add('is-active');
 		this._loop();
+		console.log('[viz] running');
 	}
 
 	_teardown() {

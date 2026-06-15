@@ -20,6 +20,7 @@
 	<script src="./build/theme.js?version=2025121200"></script>
 </head>
 <body>
+	<canvas id="coderadio-viz-canvas" aria-label="Visualizer background"></canvas>
 	<main id="content">
 		<section id="container-fixed">
 			<div id="editor-container" aria-label="Code editor">
@@ -134,7 +135,6 @@
 			<pre id="error"></pre>
 			<div id="canvas-container" title="Click to play">
 				<canvas id="canvas-main" width="1024" height="256" aria-label="Oscillioscope"></canvas>
-				<canvas id="coderadio-viz-canvas" aria-label="Visualizer"></canvas>
 				<div id="canvas-timecursor"></div>
 				<div id="canvas-play" class="canvas-initial canvas-play">
 					<svg id="svg-canvas-play"><use xlink:href="#symbol-play"></use></svg>
