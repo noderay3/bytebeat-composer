@@ -127,18 +127,27 @@ export class TrackList {
 	// --- Composer library entry chip injection -----------------------
 
 	_onLibraryMutation(muts) {
+		let anyAdded = false;
 		for(const m of muts) {
 			for(const node of m.addedNodes) {
 				if(node.nodeType !== 1) continue;
 				if(node.classList && node.classList.contains('entry')) {
 					this._augmentEntry(node);
+					anyAdded = true;
 				}
 				// Library wraps entries in songs-block / songs containers.
 				if(node.querySelectorAll) {
-					node.querySelectorAll('.entry').forEach(e => this._augmentEntry(e));
+					node.querySelectorAll('.entry').forEach(e => {
+						this._augmentEntry(e);
+						anyAdded = true;
+					});
 				}
 			}
 		}
+		// If a track is currently playing and the user just expanded the
+		// library section that contains it, paint the highlight on the
+		// freshly-rendered row too.
+		if(anyAdded) this._updateCurrent();
 	}
 
 	/// Add 👍 👎 ⭐ chips to a single `.entry` row + record the track in our

@@ -2374,9 +2374,23 @@ button[name="close"] {
 .coderadio-track:hover {
 	background: rgba(74, 144, 255, 0.08);
 }
-.coderadio-track.is-current {
+/* Currently-playing highlight, applied to:
+ *  - .coderadio-track rows in the Favorites section (top of scroll)
+ *  - .entry rows in the composer's library containers (Classic /
+ *    JS-256 / JS-1k / JS-big / Floatbeat / …)
+ * Both can flag the same track simultaneously if it lives in both
+ * places — the user sees it lit wherever they're looking. */
+.coderadio-track.coderadio-current {
 	background: rgba(74, 192, 90, 0.12);
-	border-left-color: #4ec05a;
+	border-left: 2px solid #4ec05a;
+	padding-left: 6px;
+}
+.entry.coderadio-current {
+	background: rgba(74, 192, 90, 0.10);
+	box-shadow: inset 2px 0 0 #4ec05a;
+}
+.entry.coderadio-current > .code-text {
+	background: rgba(74, 192, 90, 0.12);
 }
 .coderadio-track-meta {
 	flex: 1 1 auto;
