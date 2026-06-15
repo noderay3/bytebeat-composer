@@ -303,8 +303,8 @@ globalThis.bytebeat = new class {
 	/// dir is +1 (next) or -1 (previous).
 	radioAdvance(dir) {
 		const track = dir > 0 ? radio.next() : radio.previous();
-		if(!track) return;	// stop / disable would go here if we surface it
-		radioLoadAndPlay(track);	// fetches file-based code if needed
+		if(!track) return;
+		radioLoadAndPlay(track);
 	}
 
 	/// Bridge composer library clicks → radio.currentTrack. The user clicked

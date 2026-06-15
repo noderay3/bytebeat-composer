@@ -169,7 +169,13 @@ export class TrackList {
 			} catch(_) {}
 		}
 		if(codeBtn) {
-			track.code = codeBtn.innerText || '';
+			// textContent — NOT innerText. The MutationObserver fires
+			// synchronously during the composer's `innerHTML = ...` and
+			// before the browser does layout; innerText requires layout
+			// and returns '' for elements that haven't been rendered yet
+			// (this exact bug stopped Next/Prev after a track or two —
+			// most entries' codes silently came up empty).
+			track.code = codeBtn.textContent || '';
 		}
 		if(fileBtn) {
 			track.codeFile = fileBtn.dataset.codeFile;
