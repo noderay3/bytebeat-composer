@@ -147,7 +147,17 @@ export class TrackList {
 		// If a track is currently playing and the user just expanded the
 		// library section that contains it, paint the highlight on the
 		// freshly-rendered row too.
-		if(anyAdded) this._updateCurrent();
+		if(anyAdded) {
+			// Force-open the upstream's nested "X more bytebeats" toggles —
+			// these wrap the overflow songs of any author with > 13 tracks
+			// and are closed by default, which means radio.next() can land
+			// on a row the user can't see. Open them once at injection.
+			for(const summary of document.querySelectorAll('summary.songs-toggle')) {
+				const parent = summary.parentElement;
+				if(parent && parent.tagName === 'DETAILS' && !parent.open) parent.open = true;
+			}
+			this._updateCurrent();
+		}
 	}
 
 	/// Add 👍 👎 ⭐ chips to a single `.entry` row + record the track in our
@@ -270,7 +280,17 @@ export class TrackList {
 		const target = this.radio.modes.lockFavorites
 			? (document.querySelector(favSel) || document.querySelector(libSel))
 			: (document.querySelector(libSel) || document.querySelector(favSel));
-		if(target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+		if(!target) return;
+		// Walk up through ancestor <details> elements and open any that are
+		// closed — otherwise the target is display:none (browser default
+		// for closed details content), scrollIntoView is a no-op, and the
+		// user can't see the highlight. Covers both the outer
+		// library-content sections and the inner "X more bytebeats"
+		// toggle.
+		for(let el = target.parentElement; el; el = el.parentElement) {
+			if(el.tagName === 'DETAILS' && !el.open) el.open = true;
+		}
+		target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
 	_updateModeAttrs() {
