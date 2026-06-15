@@ -2498,27 +2498,32 @@ button[name="close"] {
 	display: block;
 }
 
-/* When viz is on, drop the html dark background so the canvas shows
- * through, and fade the UI containers per the opacity slider. */
+/* When viz is on:
+ * - html / body drop their dark backgrounds so the canvas shows through
+ * - the editor + scope + library containers get translucent backgrounds
+ *   (rgba values mirror the macOS CodeRadio CSS injection — same feel) */
 html.viz-active,
 html.viz-active body {
-	background: transparent;
+	background: transparent !important;
 }
-html.viz-active body > section,
-html.viz-active body > aside {
-	opacity: var(--viz-ui-opacity, 1);
-	transition: opacity 100ms ease;
+/* CodeMirror editor — let viz bleed through the code area too. */
+html.viz-active .cm-editor,
+html.viz-active .cm-content,
+html.viz-active .cm-scroller {
+	background: rgba(25, 28, 34, 0.20) !important;
+}
+html.viz-active .cm-gutters {
+	background: rgba(25, 28, 34, 0.30) !important;
+}
+html.viz-active .cm-activeLine {
+	background: rgba(74, 144, 255, 0.20) !important;
+}
+/* Oscilloscope canvas frame + library scroll backdrop. */
+html.viz-active #canvas-container {
+	background: rgba(25, 28, 34, 0.20) !important;
+}
+html.viz-active #container-scroll {
+	background: rgba(25, 28, 34, 0.40) !important;
 }
 
-/* Opacity slider — hidden until viz is on, then a thin inline range. */
-.coderadio-viz-opacity {
-	display: none;
-	width: 90px;
-	vertical-align: middle;
-	margin: 0 6px;
-	accent-color: #4ec05a;
-}
-html.viz-active .coderadio-viz-opacity {
-	display: inline-block;
-}
 

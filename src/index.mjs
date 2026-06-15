@@ -273,12 +273,12 @@ globalThis.bytebeat = new class {
 			if(ev.type === 'current' || ev.type === 'rating') this._syncNowRating();
 		});
 		this._syncNowRating();
-		// Global spacebar → toggle the visualizer, but only when no editable
-		// element is focused. Mirrors the macOS CodeRadio app's space-key
-		// behavior. CodeMirror's editor area is contenteditable, so
-		// isContentEditable picks it up cleanly. Range inputs (the opacity
-		// slider) also receive space — left in editable check via input/
-		// textarea covers them naturally since input includes type=range.
+		// Global spacebar → next random visualizer preset, gated on no
+		// editable element being focused. Mirrors the macOS CodeRadio
+		// app's space-key behavior. CodeMirror's editor area is
+		// contenteditable, so typing space inside it still inserts a
+		// space. randomPreset is a no-op when the viz isn't running, so
+		// pressing space when the viz is off does nothing.
 		window.addEventListener('keydown', e => {
 			if(e.code !== 'Space' && e.key !== ' ') return;
 			const ae = document.activeElement;
@@ -289,23 +289,8 @@ globalThis.bytebeat = new class {
 			);
 			if(editable) return;
 			e.preventDefault();
-			visualizer.toggle();
+			visualizer.randomPreset();
 		});
-		// UI-over-viz opacity slider. Stays at 100% until the user pulls
-		// it down. Persisted in localStorage; CSS var --viz-ui-opacity on
-		// <html> drives the opacity of body > section / aside containers
-		// while html.viz-active is set.
-		const opacitySlider = document.getElementById('control-viz-opacity');
-		if(opacitySlider) {
-			const saved = parseFloat(localStorage.getItem('coderadio.viz.uiOpacity'));
-			if(!isNaN(saved) && saved >= 0.1 && saved <= 1) opacitySlider.value = String(saved);
-			document.documentElement.style.setProperty('--viz-ui-opacity', opacitySlider.value);
-			opacitySlider.addEventListener('input', () => {
-				document.documentElement.style.setProperty('--viz-ui-opacity', opacitySlider.value);
-				try { localStorage.setItem('coderadio.viz.uiOpacity', opacitySlider.value); }
-				catch(_) {}
-			});
-		}
 		// Try to resume the last-played track (no-op if its source library
 		// hasn't been opened yet).
 		radio.restoreLastTrack();
