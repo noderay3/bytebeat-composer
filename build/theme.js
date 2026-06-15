@@ -1,0 +1,2 @@
+!function(){let e={};try{e=JSON.parse(localStorage.settings)}catch(e){}e.themeStyle&&(document.documentElement.dataset.theme=e.themeStyle,document.documentElement.dataset.themeType=e.themeStyle.endsWith("Light")?"light":"dark"),e.codeStyle&&(document.documentElement.dataset.syntax=e.codeStyle,document.documentElement.dataset.syntaxType=e.codeStyle.endsWith("Light")?"light":"dark")}();
+//# sourceMappingURL=theme.js.map
