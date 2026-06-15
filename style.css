@@ -2480,11 +2480,10 @@ button[name="close"] {
  * Butterchurn visualizer overlay
  * ============================================================ */
 
-/* Full-viewport Milkdrop background. Sits behind everything else; the
- * composer's UI (controls, code editor, oscilloscope, library scroll)
- * paints on top via natural stacking order. Hidden by default; the 👁
- * toolbar button or spacebar (when no editable element is focused)
- * toggles .is-active. */
+/* Full-viewport Milkdrop background. z-index: -1 puts it BELOW the
+ * <html> stacking root's children so the composer's UI paints on top.
+ * Hidden by default; the 👁 toolbar button or Space (when no editable
+ * element is focused) toggles .is-active. */
 #coderadio-viz-canvas {
 	position: fixed;
 	top: 0;
@@ -2493,9 +2492,33 @@ button[name="close"] {
 	height: 100vh;
 	display: none;
 	pointer-events: none;
-	z-index: 0;
+	z-index: -1;
 }
 #coderadio-viz-canvas.is-active {
 	display: block;
+}
+
+/* When viz is on, drop the html dark background so the canvas shows
+ * through, and fade the UI containers per the opacity slider. */
+html.viz-active,
+html.viz-active body {
+	background: transparent;
+}
+html.viz-active body > section,
+html.viz-active body > aside {
+	opacity: var(--viz-ui-opacity, 1);
+	transition: opacity 100ms ease;
+}
+
+/* Opacity slider — hidden until viz is on, then a thin inline range. */
+.coderadio-viz-opacity {
+	display: none;
+	width: 90px;
+	vertical-align: middle;
+	margin: 0 6px;
+	accent-color: #4ec05a;
+}
+html.viz-active .coderadio-viz-opacity {
+	display: inline-block;
 }
 

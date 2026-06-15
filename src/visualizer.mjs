@@ -107,6 +107,10 @@ export class Visualizer {
 		// would init at 0×0 — WebGL state then gets wedged and the
 		// ResizeObserver recovery is too late.
 		this.canvas.classList.add('is-active');
+		// viz-active on <html> drives the UI-fade CSS (transparent html
+		// background + opacity slider over container-fixed / container-scroll
+		// / legend-panel).
+		document.documentElement.classList.add('viz-active');
 		if(!this.viz) {
 			this._resizeCanvas();
 			console.log('[viz] createVisualizer', this.canvas.width, '×', this.canvas.height);
@@ -150,6 +154,7 @@ export class Visualizer {
 		cancelAnimationFrame(this.rafId);
 		this.rafId = 0;
 		if(this.canvas) this.canvas.classList.remove('is-active');
+		document.documentElement.classList.remove('viz-active');
 		// Don't destroy the viz — keep it warm so retoggle is instant. The
 		// rAF loop bails on !this.enabled so it just stops rendering.
 	}
