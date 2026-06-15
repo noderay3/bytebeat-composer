@@ -260,6 +260,17 @@ export class TrackList {
 		const key = trackKey(cur);
 		document.querySelectorAll(`.entry[data-hash="${ cssEsc(key) }"]`).forEach(el => el.classList.add('coderadio-current'));
 		document.querySelectorAll(`.coderadio-track[data-fav-key="${ cssEsc(key) }"]`).forEach(el => el.classList.add('coderadio-current'));
+		// Auto-scroll the highlighted row into view so the user can see
+		// where they are after Next/Prev. Prefer the row in the context
+		// they're navigating: Favorites if locked, library entry
+		// otherwise. block:'nearest' means no scroll if already visible
+		// and minimum-distance scroll when off-screen.
+		const favSel = `.coderadio-track[data-fav-key="${ cssEsc(key) }"].coderadio-current`;
+		const libSel = `.entry[data-hash="${ cssEsc(key) }"].coderadio-current`;
+		const target = this.radio.modes.lockFavorites
+			? (document.querySelector(favSel) || document.querySelector(libSel))
+			: (document.querySelector(libSel) || document.querySelector(favSel));
+		if(target) target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 	}
 
 	_updateModeAttrs() {
