@@ -44,6 +44,10 @@ jobs:
       - name: Deploy to Cloudflare Pages
         uses: cloudflare/wrangler-action@v3
         with:
+          # Pin wrangler v4 — the action's default v3.90 hits an auth path
+          # our token's `Pages:Edit`-only scope can't satisfy. v4 works
+          # cleanly with the same minimal permission.
+          wranglerVersion: '4'
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: pages deploy _deploy --project-name=bytebeat-composer --branch=main --commit-dirty=true
