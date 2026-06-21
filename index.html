@@ -21,12 +21,11 @@
 </head>
 <body>
 	<canvas id="coderadio-viz-canvas" aria-label="Visualizer background"></canvas>
-	<video id="coderadio-cat" muted loop playsinline preload="metadata" aria-hidden="true">
-		<source src="./vendor/cat.webm" type="video/webm">
-	</video>
+	<div id="coderadio-cat-toast" role="status" aria-live="polite"></div>
 	<main id="content">
 		<section id="container-fixed">
 			<div id="editor-container" aria-label="Code editor">
+				<canvas id="coderadio-cat" aria-hidden="true"></canvas>
 				<div id="editor-default">
 					<svg><use xlink:href="#symbol-wait"></svg>
 				</div>
@@ -127,7 +126,7 @@
 					<button id="control-viz" class="control-button" title="Visualizer">👁</button>
 					<button id="control-viz-next" class="control-button" title="Next visualizer preset (Space)">🎲</button>
 					<button id="control-viz-auto" class="control-button" title="Auto-cycle presets — hard-cuts on bass kicks, max ~18s between swaps">🔁</button>
-					<button id="control-cat" class="control-button" title="Vibing cat overlay (pulses on bass)">🐱</button>
+					<button id="control-cat" class="control-button" title="Vibing cat (long-press to cycle detector × engine combos)">🐱</button>
 				</div>
 				<div class="controls-group coderadio-now-rating" id="coderadio-now-rating" title="Rate the currently-playing track">
 					<button id="control-rate-up" class="control-button coderadio-rate-btn" disabled title="Thumbs up — boosts in shuffle">👍</button>
