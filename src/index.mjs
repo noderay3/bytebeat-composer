@@ -311,7 +311,6 @@ globalThis.bytebeat = new class {
 		radio.subscribe(ev => {
 			if(ev.type === 'current' || ev.type === 'rating') this._syncNowRating();
 		});
-		this._syncNowRating();
 		// Global spacebar → next random visualizer preset, gated on no
 		// editable element being focused. Mirrors the macOS CodeRadio
 		// app's space-key behavior. CodeMirror's editor area is
@@ -331,8 +330,13 @@ globalThis.bytebeat = new class {
 			visualizer.randomPreset();
 		});
 		// Try to resume the last-played track (no-op if its source library
-		// hasn't been opened yet).
+		// hasn't been opened yet). Sync the rating chips + track highlight
+		// AFTER restore so they see the restored track. Previously both ran
+		// before restoreLastTrack, so on page-load the rating buttons were
+		// stuck disabled and the currently-playing row stayed unhighlighted.
 		radio.restoreLastTrack();
+		this._syncNowRating();
+		trackList._updateCurrent();
 	}
 
 	_syncNowRating() {
