@@ -35,8 +35,7 @@ const STORAGE_RATINGS = 'coderadio.ratings';
 const STORAGE_MODES   = 'coderadio.modes';
 const STORAGE_LAST    = 'coderadio.lastTrack';
 
-const SHUFFLE_HISTORY_MAX = 32;
-const SHUFFLE_WEIGHT_UP   = 3;
+const SHUFFLE_WEIGHT_UP = 3;
 
 /// trackKey(track) — the canonical identifier used by the rating store.
 /// Prefer the composer's stable `hash` if present; fall back to the code
@@ -52,7 +51,15 @@ export class Radio {
 		this.ratings = new Map(); // key → { rating, favorite, track (metadata) }
 		this.modes = { shuffle: false, lockFavorites: false };
 		this.cursor = 0;
-		this.shuffleHistory = []; // recently-played tracks (objects)
+		// Shuffle queue — generated once when shuffle mode is enabled
+		// (or when the active pool changes via lock-favorites). prev/next
+		// walk this queue like sequential, so going back-and-forth is
+		// fully symmetric — the same track always lives at the same
+		// index until the queue is regenerated. Weighted by duplicating
+		// thumbs-up tracks SHUFFLE_WEIGHT_UP times in the queue before
+		// the Fisher-Yates pass.
+		this.shuffledQueue = [];
+		this.shuffledIndex = 0;
 		this.currentTrack = null;
 		this._listeners = new Set();
 		this._universeProvider = () => [];
@@ -164,8 +171,16 @@ export class Radio {
 
 	setMode(field, value) {
 		if(!(field in this.modes)) return;
+		const before = { ...this.modes };
 		this.modes[field] = !!value;
 		this._saveModes();
+		// Rebuild the shuffle queue whenever the pool composition or the
+		// mode itself changes meaningfully — fresh enable of shuffle, or
+		// a lock-favorites flip while shuffle is on.
+		const needsRebuild =
+			(field === 'shuffle' && !before.shuffle && this.modes.shuffle) ||
+			(field === 'lockFavorites' && this.modes.shuffle && before.lockFavorites !== this.modes.lockFavorites);
+		if(needsRebuild) this._buildShuffleQueue();
 		this._emit({ type: 'mode', field, value: this.modes[field] });
 	}
 	toggleMode(field) {
@@ -205,22 +220,18 @@ export class Radio {
 		const key = trackKey(track);
 		const idx = active.findIndex(t => trackKey(t) === key);
 		if(idx >= 0) this.cursor = idx;
+		// Also sync the shuffle position to the nearest occurrence of this
+		// track in the shuffled queue, so subsequent next/prev continue
+		// from where the user landed rather than jumping arbitrarily.
+		this._syncShuffleIndexToCurrent();
 		this._saveLastTrackKey(key);
 		this._emit({ type: 'current', track });
 	}
 
 	next() {
+		if(this.modes.shuffle) return this._shuffleStep(+1);
 		const pool = this.getActiveList();
 		if(pool.length === 0) return null;
-		if(this.modes.shuffle) {
-			if(this.currentTrack) this._pushHistory(this.currentTrack);
-			const pick = this._weightedRandom(pool);
-			if(pick) this.setCurrent(pick);
-			return pick;
-		}
-		// Sequential — wrap end-of-list back to the start. (No Repeat
-		// button anymore; the user removed it since there's no auto-advance,
-		// so the only sensible Next-at-end behavior is wrap.)
 		const newIdx = (this.cursor + 1) % pool.length;
 		this.cursor = newIdx;
 		this.setCurrent(pool[newIdx]);
@@ -228,46 +239,65 @@ export class Radio {
 	}
 
 	previous() {
+		if(this.modes.shuffle) return this._shuffleStep(-1);
 		const pool = this.getActiveList();
 		if(pool.length === 0) return null;
-		if(this.modes.shuffle) {
-			const prev = this.shuffleHistory.pop();
-			if(prev) {
-				this.setCurrent(prev);
-				return prev;
-			}
-			const pick = this._weightedRandom(pool);
-			if(pick) this.setCurrent(pick);
-			return pick;
-		}
 		const newIdx = (this.cursor - 1 + pool.length) % pool.length;
 		this.cursor = newIdx;
 		this.setCurrent(pool[newIdx]);
 		return pool[newIdx];
 	}
 
-	// --- internals ----------------------------------------------------
+	// --- shuffle queue ------------------------------------------------
 
-	_weightedRandom(pool) {
-		if(pool.length === 0) return null;
-		const weights = pool.map(t => {
-			const r = this.getRating(trackKey(t)).rating;
-			return r === 'up' ? SHUFFLE_WEIGHT_UP : 1;
-		});
-		const total = weights.reduce((a, b) => a + b, 0);
-		let r = Math.random() * total;
-		for(let i = 0; i < pool.length; i++) {
-			r -= weights[i];
-			if(r <= 0) return pool[i];
-		}
-		return pool[pool.length - 1];
+	/// Walk the shuffled queue by one step. The queue is generated once
+	/// per shuffle session so back-and-forth is fully symmetric — same
+	/// index always returns the same track until the queue is rebuilt.
+	_shuffleStep(dir) {
+		if(this.shuffledQueue.length === 0) this._buildShuffleQueue();
+		if(this.shuffledQueue.length === 0) return null;
+		const len = this.shuffledQueue.length;
+		this.shuffledIndex = (this.shuffledIndex + dir + len) % len;
+		const track = this.shuffledQueue[this.shuffledIndex];
+		// Call setCurrent BUT this would re-sync shuffledIndex to nearest
+		// occurrence of `track`, which is fine — duplicate-aware sync
+		// stays put if we're already on a valid index for this track.
+		this.setCurrent(track);
+		return track;
 	}
 
-	_pushHistory(track) {
-		this.shuffleHistory.push(track);
-		if(this.shuffleHistory.length > SHUFFLE_HISTORY_MAX) {
-			this.shuffleHistory.shift();
+	_buildShuffleQueue() {
+		const pool = this.getActiveList();
+		// Weight by duplicating thumbs-up tracks SHUFFLE_WEIGHT_UP times.
+		const queue = [];
+		for(const t of pool) {
+			const w = this.getRating(trackKey(t)).rating === 'up' ? SHUFFLE_WEIGHT_UP : 1;
+			for(let i = 0; i < w; i++) queue.push(t);
 		}
+		// Fisher-Yates shuffle (in place).
+		for(let i = queue.length - 1; i > 0; i--) {
+			const j = Math.floor(Math.random() * (i + 1));
+			[queue[i], queue[j]] = [queue[j], queue[i]];
+		}
+		this.shuffledQueue = queue;
+		this._syncShuffleIndexToCurrent();
+	}
+
+	/// Pick the occurrence of currentTrack in the shuffled queue closest
+	/// to the present shuffledIndex. Handles the case where weighting put
+	/// the same track at multiple positions — we want next/prev to stay
+	/// coherent with where the user has already walked.
+	_syncShuffleIndexToCurrent() {
+		if(!this.currentTrack || this.shuffledQueue.length === 0) return;
+		const curKey = trackKey(this.currentTrack);
+		let bestIdx = -1, bestDist = Infinity;
+		for(let i = 0; i < this.shuffledQueue.length; i++) {
+			if(trackKey(this.shuffledQueue[i]) === curKey) {
+				const d = Math.abs(i - this.shuffledIndex);
+				if(d < bestDist) { bestDist = d; bestIdx = i; }
+			}
+		}
+		if(bestIdx >= 0) this.shuffledIndex = bestIdx;
 	}
 
 	// --- persistence --------------------------------------------------
