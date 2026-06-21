@@ -5,6 +5,7 @@ import { Radio } from './radio.mjs';
 import { Scope } from './scope.mjs';
 import { TrackList } from './track-list.mjs';
 import { UI } from './ui.mjs';
+import { VibingCat } from './vibing-cat.mjs';
 import { Visualizer } from './visualizer.mjs';
 import { getCodeFromUrl, getUrlFromCode } from './url.mjs';
 
@@ -15,6 +16,7 @@ const radio = new Radio();
 const scope = new Scope();
 const ui = new UI();
 const visualizer = new Visualizer();
+const vibingCat = new VibingCat();
 /// Load a track via the bytebeat composer, fetching its code from
 /// data/songs/<type>/<hash>.js if it's a file-based library entry
 /// (no inline code in the upstream library HTML). Without this fetch
@@ -152,6 +154,7 @@ globalThis.bytebeat = new class {
 			case 'control-viz': visualizer.toggle(); break;
 			case 'control-viz-next': visualizer.nextPreset(); break;
 			case 'control-viz-auto': visualizer.toggleAutoChange(); break;
+			case 'control-cat': vibingCat.toggle(); break;
 			case 'control-compact': {
 				const on = !document.body.classList.contains('compact-mode');
 				document.body.classList.toggle('compact-mode', on);
@@ -270,8 +273,10 @@ globalThis.bytebeat = new class {
 		this.radio = radio;
 		this.trackList = trackList;
 		this.visualizer = visualizer;
+		this.vibingCat = vibingCat;
 		trackList.initElements();
 		visualizer.initElements();
+		vibingCat.initElements();
 		this._syncRadioToolbar();
 		// Compact mode — minimal UI showing only the radio controls.
 		// Default: ON for mobile-sized viewports (≤ 768px), OFF for
@@ -506,6 +511,7 @@ globalThis.bytebeat = new class {
 		// worklet exist. If the user has the viz toggled on (preference
 		// persisted), this will kick off the render loop immediately.
 		visualizer.attachAudio(this.audioCtx, this.audioWorkletNode);
+		vibingCat.attachAudio(this.audioCtx, this.audioWorkletNode);
 		// Recorder for recording audio files
 		const mediaDest = this.audioCtx.createMediaStreamDestination();
 		const audioRecorder = this.audioRecorder = new MediaRecorder(mediaDest.stream);

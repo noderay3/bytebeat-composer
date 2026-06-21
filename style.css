@@ -2567,4 +2567,35 @@ html.viz-active #container-scroll {
 	background: rgba(25, 28, 34, 0.40) !important;
 }
 
+/* Vibing-cat overlay. WebM-VP9 with alpha — VP9 alpha is a side
+ * channel so browsers render the cat against whatever is behind it.
+ * Bottom-right, pointer-events:none, scales via --pulse driven by the
+ * vibing-cat.mjs bass detector. */
+#coderadio-cat {
+	position: fixed;
+	right: 16px;
+	bottom: 16px;
+	width: 220px;
+	max-width: 28vw;
+	height: auto;
+	display: none;
+	pointer-events: none;
+	z-index: 5;
+	--pulse: 1;
+	transform: scale(var(--pulse));
+	transform-origin: center bottom;
+	transition: transform 220ms cubic-bezier(.2, .7, .4, 1);
+	filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.45));
+}
+#coderadio-cat.is-active {
+	display: block;
+}
+@media (max-width: 768px) {
+	#coderadio-cat {
+		width: 160px;
+		right: 8px;
+		bottom: 8px;
+	}
+}
+
 
