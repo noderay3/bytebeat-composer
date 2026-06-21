@@ -22,7 +22,9 @@ import { DanceEngineV2 } from './dance/engine-v2.mjs';
 import { DanceEngineV3 } from './dance/engine-v3.mjs';
 
 const STORAGE_ENABLED = 'coderadio.cat.enabled';
-const STORAGE_COMBO   = 'coderadio.cat.combo';
+// Bumped to .v2 to reset any cycled-away combo back to Hybrid · Expressive v3
+// (the COMBOS[0] default) on first reload after this commit.
+const STORAGE_COMBO   = 'coderadio.cat.combo.v2';
 const LONG_PRESS_MS   = 550;
 const TOAST_DURATION  = 1900;
 
@@ -229,8 +231,11 @@ export class VibingCat {
 
 		this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-		// Fit the cat into the canvas preserving aspect ratio. Scale lets
-		// V3's spring-overshoot pump the size on strong beats.
+		// Fit the cat into the canvas preserving aspect ratio. Bottom-left
+		// anchor matches iOS VibingCatOverlay.updateLayout — cat hugs the
+		// left edge of the editor so it never looks cropped or floating
+		// in the middle of a wide canvas. Scale lets V3's spring-overshoot
+		// pump the size on strong beats.
 		const catAR = FRAME_W / FRAME_H;
 		const canvAR = this.canvas.width / this.canvas.height;
 		let dw, dh;
@@ -241,8 +246,8 @@ export class VibingCat {
 			dw = this.canvas.width * scale;
 			dh = dw / catAR;
 		}
-		const dx = (this.canvas.width - dw) / 2;
-		const dy = (this.canvas.height - dh) / 2;
+		const dx = 0;
+		const dy = this.canvas.height - dh;
 		this.ctx.drawImage(
 			this._sprite,
 			col * FRAME_W, row * FRAME_H, FRAME_W, FRAME_H,
