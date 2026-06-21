@@ -151,6 +151,7 @@ globalThis.bytebeat = new class {
 				break;
 			case 'control-viz': visualizer.toggle(); break;
 			case 'control-viz-next': visualizer.nextPreset(); break;
+			case 'control-viz-auto': visualizer.toggleAutoChange(); break;
 			case 'control-compact': {
 				const on = !document.body.classList.contains('compact-mode');
 				document.body.classList.toggle('compact-mode', on);

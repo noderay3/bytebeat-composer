@@ -6,17 +6,39 @@
 // exposes window.butterchurn + window.butterchurnPresetsMinimal — no
 // ES-module integration needed in our rollup pipeline.
 //
-// Audio source: the bytebeat AudioWorkletNode. We attach later (not in
-// initElements) because the AudioContext is created lazily when the
-// user first hits play. index.mjs calls attachAudio() after the worklet
-// is wired up.
+// On first viz enable we LAZY-LOAD the four bigger preset packs from
+// /vendor/ (Presets, Extra, Extra2, NonMinimal — ~2.5MB total, ~2600
+// extra presets). Initial page weight stays minimal-only; the bigger
+// library shows up on the first 🎲 or auto-cycle after the lazy fetch
+// resolves.
 //
-// Preset rotation: random preset per attach + manual 🎲 button. We do
-// NOT auto-switch on track change — Butterchurn's loadPreset triggers a
-// short blend, which is distracting if happening every few seconds.
+// Auto-change (toolbar 🔁): hard-cuts the preset on bass kicks, with a
+// MAX_INTERVAL safety net so it never sits still on quiet sections.
+// Beat detection is a separate AnalyserNode tap (we don't reach into
+// butterchurn internals) — bass-band RMS vs adaptive rolling average.
 
-const STORAGE_ENABLED = 'coderadio.viz.enabled';
-const BLEND_TIME      = 2.7;	// seconds (Butterchurn's blend in default)
+const STORAGE_ENABLED  = 'coderadio.viz.enabled';
+const STORAGE_AUTO     = 'coderadio.viz.autoChange';
+const BLEND_TIME       = 2.7;	// seconds (Butterchurn's blend in default)
+
+// Auto-change tuning. Beat-cut intervals are conservative to avoid
+// strobing on busy mixes; the max-interval forces a swap during
+// breakdowns / sparse sections so the viz never feels frozen.
+const BEAT_MIN_INTERVAL = 6000;	// ms — min gap between hard-cuts
+const BEAT_MAX_INTERVAL = 18000;	// ms — forced blend swap when no beat
+const BEAT_THRESH_MULT  = 1.45;	// bass energy must exceed avg * this
+const BEAT_MIN_ENERGY   = 0.14;	// 0..1 — silence guard, no kicks below
+const BEAT_MIN_GAP      = 250;	// ms — debounce individual beats
+const BEAT_HISTORY_LEN  = 60;	// ~1s @ 60fps rolling average
+
+// Lazy preset packs to fetch on first viz enable. Order matters only
+// for dedup-key collisions (later packs win — we merge into one dict).
+const EXTRA_PACKS = [
+	{ src: './vendor/butterchurnPresets.min.js',           global: 'butterchurnPresets' },
+	{ src: './vendor/butterchurnPresetsExtra.min.js',      global: 'butterchurnPresetsExtra' },
+	{ src: './vendor/butterchurnPresetsExtra2.min.js',     global: 'butterchurnPresetsExtra2' },
+	{ src: './vendor/butterchurnPresetsNonMinimal.min.js', global: 'butterchurnPresetsNonMinimal' },
+];
 
 export class Visualizer {
 	constructor() {
@@ -28,8 +50,16 @@ export class Visualizer {
 		this.presetNames = null;
 		this.currentPresetIdx = 0;
 		this.enabled = false;
+		this.autoChangeEnabled = false;
 		this.rafId = 0;
 		this._resizeObserver = null;
+		this._extraPacksLoading = false;
+		this._extraPacksLoaded = false;
+		this._beatAnalyser = null;
+		this._beatBuf = null;
+		this._beatHistory = [];
+		this._lastBeatTime = 0;
+		this._lastSwap = 0;
 	}
 
 	initElements() {
@@ -44,9 +74,12 @@ export class Visualizer {
 		const hasLib     = !!(bc && typeof bc.createVisualizer === 'function');
 		const hasPresets = !!(bcPresets && typeof bcPresets.getPresets === 'function');
 		console.log(`[viz] init — butterchurn:${ hasLib ? 'OK' : 'MISSING' } presets:${ hasPresets ? 'OK' : 'MISSING' }`);
-		try { this.enabled = localStorage.getItem(STORAGE_ENABLED) === '1'; }
-		catch(_) {}
+		try {
+			this.enabled = localStorage.getItem(STORAGE_ENABLED) === '1';
+			this.autoChangeEnabled = localStorage.getItem(STORAGE_AUTO) === '1';
+		} catch(_) {}
 		this._syncToggleButton();
+		this._syncAutoChangeButton();
 		if(this.enabled && this.audioContext) this._setup();
 	}
 
@@ -71,16 +104,26 @@ export class Visualizer {
 		else this._teardown();
 	}
 
+	toggleAutoChange() {
+		this.autoChangeEnabled = !this.autoChangeEnabled;
+		console.log('[viz] auto-change →', this.autoChangeEnabled ? 'ON' : 'OFF');
+		try { localStorage.setItem(STORAGE_AUTO, this.autoChangeEnabled ? '1' : '0'); }
+		catch(_) {}
+		this._syncAutoChangeButton();
+		this._lastSwap = performance.now();	// reset timer so next swap waits a full interval
+		if(this.autoChangeEnabled && this.audioContext && this.audioNode) this._initBeatDetect();
+	}
+
 	nextPreset() {
 		if(!this.viz || !this.presetNames || this.presetNames.length === 0) return;
 		this.currentPresetIdx = (this.currentPresetIdx + 1) % this.presetNames.length;
 		this.viz.loadPreset(this.presets[this.presetNames[this.currentPresetIdx]], BLEND_TIME);
 	}
 
-	randomPreset() {
+	randomPreset(blend = BLEND_TIME) {
 		if(!this.viz || !this.presetNames || this.presetNames.length === 0) return;
 		this.currentPresetIdx = Math.floor(Math.random() * this.presetNames.length);
-		this.viz.loadPreset(this.presets[this.presetNames[this.currentPresetIdx]], BLEND_TIME);
+		this.viz.loadPreset(this.presets[this.presetNames[this.currentPresetIdx]], blend);
 	}
 
 	// --- internals ----------------------------------------------------
@@ -107,9 +150,6 @@ export class Visualizer {
 		// would init at 0×0 — WebGL state then gets wedged and the
 		// ResizeObserver recovery is too late.
 		this.canvas.classList.add('is-active');
-		// viz-active on <html> drives the UI-fade CSS (transparent html
-		// background + opacity slider over container-fixed / container-scroll
-		// / legend-panel).
 		document.documentElement.classList.add('viz-active');
 		if(!this.viz) {
 			this._resizeCanvas();
@@ -126,8 +166,6 @@ export class Visualizer {
 				this.canvas.classList.remove('is-active');
 				return;
 			}
-			// Resize on container changes — Butterchurn's setRendererSize
-			// rebuilds GL state, so debounce.
 			let resizeTimer = 0;
 			this._resizeObserver = new ResizeObserver(() => {
 				clearTimeout(resizeTimer);
@@ -141,11 +179,16 @@ export class Visualizer {
 		if(!this.presets && bcPresets && typeof bcPresets.getPresets === 'function') {
 			this.presets = bcPresets.getPresets();
 			this.presetNames = Object.keys(this.presets);
-			console.log('[viz] loaded', this.presetNames.length, 'presets');
+			console.log('[viz] loaded', this.presetNames.length, 'minimal presets');
 		}
 		if(this.presetNames && this.presetNames.length > 0) {
 			this.randomPreset();
 		}
+		// Kick off the bigger preset packs once — they merge in when ready
+		// and the next randomPreset draws from the full ~2700.
+		this._lazyLoadExtraPacks();
+		if(this.autoChangeEnabled) this._initBeatDetect();
+		this._lastSwap = performance.now();
 		this._loop();
 		console.log('[viz] running');
 	}
@@ -155,12 +198,11 @@ export class Visualizer {
 		this.rafId = 0;
 		if(this.canvas) this.canvas.classList.remove('is-active');
 		document.documentElement.classList.remove('viz-active');
-		// Don't destroy the viz — keep it warm so retoggle is instant. The
-		// rAF loop bails on !this.enabled so it just stops rendering.
 	}
 
 	_loop() {
 		if(!this.enabled || !this.viz) return;
+		this._maybeAutoSwap();
 		this.viz.render();
 		this.rafId = requestAnimationFrame(() => this._loop());
 	}
@@ -178,5 +220,97 @@ export class Visualizer {
 	_syncToggleButton() {
 		const el = document.getElementById('control-viz');
 		if(el) el.classList.toggle('is-active', this.enabled);
+	}
+
+	_syncAutoChangeButton() {
+		const el = document.getElementById('control-viz-auto');
+		if(el) el.classList.toggle('is-active', this.autoChangeEnabled);
+	}
+
+	// --- lazy preset packs --------------------------------------------
+
+	_lazyLoadExtraPacks() {
+		if(this._extraPacksLoaded || this._extraPacksLoading) return;
+		this._extraPacksLoading = true;
+		const loadScript = (src) => new Promise((res, rej) => {
+			const s = document.createElement('script');
+			s.src = src;
+			s.async = true;
+			s.onload = () => res(src);
+			s.onerror = () => rej(new Error('failed to load ' + src));
+			document.head.appendChild(s);
+		});
+		(async () => {
+			try {
+				for(const { src } of EXTRA_PACKS) await loadScript(src);
+				const merged = this.presets ? { ...this.presets } : {};
+				for(const { global } of EXTRA_PACKS) {
+					const pack = (globalThis[global] && globalThis[global].default) || globalThis[global];
+					if(pack && typeof pack.getPresets === 'function') {
+						Object.assign(merged, pack.getPresets());
+					}
+				}
+				this.presets = merged;
+				this.presetNames = Object.keys(merged);
+				this._extraPacksLoaded = true;
+				console.log('[viz] extra packs ready —', this.presetNames.length, 'presets total');
+			} catch(e) {
+				console.warn('[viz] extra preset pack load failed', e);
+			} finally {
+				this._extraPacksLoading = false;
+			}
+		})();
+	}
+
+	// --- beat detection / auto-change ---------------------------------
+
+	_initBeatDetect() {
+		if(this._beatAnalyser || !this.audioContext || !this.audioNode) return;
+		const a = this.audioContext.createAnalyser();
+		a.fftSize = 512;
+		a.smoothingTimeConstant = 0.3;
+		try { this.audioNode.connect(a); }
+		catch(e) { console.warn('[viz] beat analyser connect failed', e); return; }
+		this._beatAnalyser = a;
+		this._beatBuf = new Uint8Array(a.frequencyBinCount);
+		this._beatHistory = [];
+		this._lastBeatTime = 0;
+	}
+
+	_pollBeat(now) {
+		if(!this._beatAnalyser) return false;
+		this._beatAnalyser.getByteFrequencyData(this._beatBuf);
+		// Bass band: first 8 bins. At 44.1kHz w/ fftSize 512, each bin is
+		// ~86Hz, so first 8 = 0..690Hz (kicks + sub).
+		let bassSum = 0;
+		for(let i = 0; i < 8; i++) bassSum += this._beatBuf[i];
+		const bassNorm = bassSum / (8 * 255);
+		this._beatHistory.push(bassNorm);
+		if(this._beatHistory.length > BEAT_HISTORY_LEN) this._beatHistory.shift();
+		let avg = 0;
+		for(const v of this._beatHistory) avg += v;
+		avg /= this._beatHistory.length;
+		const isBeat = bassNorm > avg * BEAT_THRESH_MULT
+			&& bassNorm > BEAT_MIN_ENERGY
+			&& (now - this._lastBeatTime > BEAT_MIN_GAP);
+		if(isBeat) this._lastBeatTime = now;
+		return isBeat;
+	}
+
+	_maybeAutoSwap() {
+		if(!this.autoChangeEnabled || !this.viz) return;
+		const now = performance.now();
+		const since = now - this._lastSwap;
+		// Hard-cut on a beat after the minimum interval. Otherwise force a
+		// soft blend swap once we hit the max so quiet sections don't
+		// freeze the viz on one preset.
+		const beat = this._pollBeat(now);
+		if(beat && since > BEAT_MIN_INTERVAL) {
+			this.randomPreset(0);	// hard cut
+			this._lastSwap = now;
+		} else if(since > BEAT_MAX_INTERVAL) {
+			this.randomPreset(BLEND_TIME);
+			this._lastSwap = now;
+		}
 	}
 }
