@@ -300,7 +300,7 @@ globalThis.bytebeat = new class {
 		// This is async (fetch + ungzip + innerHTML), so everything that
 		// depends on the universe being populated — restoreLastTrack,
 		// _syncNowRating, _updateCurrent — must wait for it to resolve.
-		(async function autoLoadClassicAndRestore() {
+		(async () => {
 			const classicContainer = document.getElementById('library-classic');
 			if(classicContainer) {
 				const summary = classicContainer.previousElementSibling;
