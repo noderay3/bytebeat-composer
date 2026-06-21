@@ -272,14 +272,31 @@ globalThis.bytebeat = new class {
 		trackList.initElements();
 		visualizer.initElements();
 		this._syncRadioToolbar();
-		// Compact mode — default ON (minimal UI showing only radio controls).
-		// User toggles via 🎛 button to reveal the full composer toolbar.
-		// Persisted to localStorage. Also wraps the toolbar so radio buttons
-		// stay reachable on narrow mobile viewports.
+		// Compact mode — minimal UI showing only the radio controls.
+		// Default: ON for mobile-sized viewports (≤ 768px), OFF for
+		// desktop. Saved preference always wins after first interaction.
 		(function applyCompactMode() {
 			const saved = localStorage.getItem('coderadio.compact');
-			const on = saved === null ? true : saved === '1';
+			let on;
+			if(saved !== null) {
+				on = saved === '1';
+			} else {
+				on = window.matchMedia('(max-width: 768px)').matches;
+			}
 			document.body.classList.toggle('compact-mode', on);
+		})();
+		// Auto-load the Classic library on first page open so radio
+		// Next/Prev has tracks immediately. Without this, the universe
+		// stays empty until the user manually expands a library section,
+		// and the radio buttons appear non-functional.
+		(function autoLoadClassicLibrary() {
+			const classicContainer = document.getElementById('library-classic');
+			if(!classicContainer) return;
+			const summary = classicContainer.previousElementSibling;
+			if(summary && summary.classList.contains('library-header')) {
+				try { library.onclickLibraryHeader(summary); }
+				catch(e) { console.error('auto-load Classic failed:', e); }
+			}
 		})();
 		// Keep the player-area rating chips in sync with the current track's
 		// state — on 'current' (a new track loaded) or 'rating' (chip

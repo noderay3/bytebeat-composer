@@ -2294,47 +2294,20 @@ button[name="close"] {
 .legend-gotcha-list strong { color: #ffd28a; }
 
 /* ============================================================
- * Compact mode — minimal UI showing only the radio controls.
- * Toggled by 🎛 button; persisted in localStorage. Default ON.
- * Hides: counter, lag, stop/reset, reverse/forward fast-play,
- * scope zoom, drawmode/mode selects, samplerate selector,
- * link/rec/expand. Keeps: pause, volume, ref, codesize, all
- * radio + rating + viz buttons.
+ * Compact mode — minimal UI. Hides every .controls-group EXCEPT
+ * those tagged as keepers (.coderadio-controls, .coderadio-now-rating,
+ * .coderadio-keep). Group-level hiding avoids leftover whitespace
+ * from groups that would otherwise have only some children hidden.
  * ============================================================ */
-body.compact-mode #control-counter-units,
-body.compact-mode #control-counter,
-body.compact-mode #control-lag,
-body.compact-mode #control-stop,
-body.compact-mode #control-reset,
-body.compact-mode #control-play-backward,
-body.compact-mode #control-play-forward,
-body.compact-mode #control-scaledown,
-body.compact-mode #control-scale,
-body.compact-mode #control-scaleup,
-body.compact-mode #control-drawmode,
-body.compact-mode #control-mode,
-body.compact-mode #control-samplerate,
-body.compact-mode #control-samplerate-select,
-body.compact-mode #control-srdivisor,
-body.compact-mode #control-srdivisor-buttons,
-body.compact-mode #control-link,
-body.compact-mode #control-rec,
-body.compact-mode #control-expand {
+body.compact-mode .controls > .controls-group:not(.coderadio-controls):not(.coderadio-now-rating):not(.coderadio-keep) {
 	display: none !important;
 }
-/* Collapse any controls-group that has nothing visible left after the
- * above hides — otherwise we get empty rectangles with borders. */
-body.compact-mode .controls-group:empty,
-body.compact-mode .controls-group:has(> *:not(.hidden):not([style*="display: none"]) ~ :only-child) {
-	/* (intentional CSS guard; rare layout edge case) */
-}
-/* When in compact mode, also let the radio-controls + rating chips wrap
- * onto a new line on narrow viewports rather than overflowing.  This is
- * what fixed prev/next being unreachable on mobile — the toolbar was
- * pushing them off-screen instead of wrapping. */
+/* Wrap the toolbar onto multiple lines when narrow (mobile) — otherwise
+ * the radio buttons get pushed off-screen and become unreachable. */
 body.compact-mode .controls {
 	flex-wrap: wrap;
 }
+/* Active state on the 🎛 toggle button when compact mode is on. */
 body.compact-mode #control-compact {
 	background: linear-gradient(#1a4a30, #0d2818);
 	border-color: #4ec05a;
