@@ -2587,18 +2587,20 @@ html.viz-active #container-scroll {
 	display: block;
 }
 
-/* When cat is on, dim the editor / loading-state backgrounds so the
- * sprite-sheet shows through but code stays readable. */
+/* When cat is on, drop the editor / loading-state backgrounds to the
+ * same translucency the viz-active path already uses (0.20 / 0.30) —
+ * any higher and the dim overlay sits on top of the cat's transparent
+ * pixels and blocks Butterchurn from bleeding through them. */
 html.cat-active #editor-default {
 	background-color: transparent !important;
 }
 html.cat-active .cm-editor,
 html.cat-active .cm-content,
 html.cat-active .cm-scroller {
-	background: rgba(25, 28, 34, 0.55) !important;
+	background: rgba(25, 28, 34, 0.20) !important;
 }
 html.cat-active .cm-gutters {
-	background: rgba(25, 28, 34, 0.65) !important;
+	background: rgba(25, 28, 34, 0.30) !important;
 }
 
 /* Long-press combo-cycle toast. Top-center, fades out after ~2s. */
