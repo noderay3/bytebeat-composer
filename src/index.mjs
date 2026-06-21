@@ -151,6 +151,12 @@ globalThis.bytebeat = new class {
 				break;
 			case 'control-viz': visualizer.toggle(); break;
 			case 'control-viz-next': visualizer.nextPreset(); break;
+			case 'control-compact': {
+				const on = !document.body.classList.contains('compact-mode');
+				document.body.classList.toggle('compact-mode', on);
+				try { localStorage.setItem('coderadio.compact', on ? '1' : '0'); } catch(_) {}
+				break;
+			}
 			case 'control-rate-up':
 				if(radio.currentTrack) radio.setRating(radio.currentTrack, 'up');
 				break;
@@ -266,6 +272,15 @@ globalThis.bytebeat = new class {
 		trackList.initElements();
 		visualizer.initElements();
 		this._syncRadioToolbar();
+		// Compact mode — default ON (minimal UI showing only radio controls).
+		// User toggles via 🎛 button to reveal the full composer toolbar.
+		// Persisted to localStorage. Also wraps the toolbar so radio buttons
+		// stay reachable on narrow mobile viewports.
+		(function applyCompactMode() {
+			const saved = localStorage.getItem('coderadio.compact');
+			const on = saved === null ? true : saved === '1';
+			document.body.classList.toggle('compact-mode', on);
+		})();
 		// Keep the player-area rating chips in sync with the current track's
 		// state — on 'current' (a new track loaded) or 'rating' (chip
 		// clicked, either from the player or from a library row).
