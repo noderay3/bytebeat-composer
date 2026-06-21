@@ -23,7 +23,7 @@ const vibingCat = new VibingCat();
 /// step, Next/Prev would silently load empty code for file-based
 /// entries — which is exactly the bug a user hit after the 3rd track,
 /// where the 4th turned out to be file-based.
-async function radioLoadAndPlay(track) {
+async function radioLoadAndPlay(track, autoPlay = true) {
 	if(!track) return;
 	let code = track.code;
 	if(!code && track.codeFile) {
@@ -42,7 +42,7 @@ async function radioLoadAndPlay(track) {
 		code,
 		sampleRate: track.sampleRate || 8000,
 		mode: track.mode || 'Bytebeat',
-	});
+	}, autoPlay);
 }
 
 const trackList = new TrackList(radio, track => {
@@ -326,10 +326,14 @@ globalThis.bytebeat = new class {
 			this._syncRadioToolbar();
 			this._syncNowRating();
 			trackList._updateCurrent();
-			// Auto-play so the 42 melody starts on first visit. If we
-			// restored a previous track, radioAdvance plays that instead.
+			// Load the restored/default track's code into the editor so the
+			// user sees it immediately, but DON'T auto-start playback — the
+			// browser's autoplay policy keeps the AudioContext suspended
+			// until a user gesture. Auto-playing would toggle the button
+			// to "pause" while the AudioContext is still locked, making the
+			// user click twice (once to sync state, once to actually play).
 			if(!this.isPlaying && radio.currentTrack) {
-				radioLoadAndPlay(radio.currentTrack);
+				radioLoadAndPlay(radio.currentTrack, false);
 			}
 			})();
 		// Keep the player-area rating chips in sync with the current track's
