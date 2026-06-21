@@ -2401,17 +2401,37 @@ body.compact-mode #control-compact {
  *    JS-256 / JS-1k / JS-big / Floatbeat / …)
  * Both can flag the same track simultaneously if it lives in both
  * places — the user sees it lit wherever they're looking. */
-.coderadio-track.coderadio-current {
-	background: rgba(74, 192, 90, 0.12);
-	border-left: 2px solid #4ec05a;
-	padding-left: 6px;
-}
+/* Currently-playing row — high-contrast, easy to spot regardless of
+ * whether the viz is on. Was barely visible (0.10 alpha green on a
+ * fully-opaque dark backdrop). */
 .entry.coderadio-current {
-	background: rgba(74, 192, 90, 0.10);
-	box-shadow: inset 2px 0 0 #4ec05a;
+	background: rgba(78, 192, 90, 0.45) !important;
+	border-left: 4px solid #4ec05a !important;
+	box-shadow: 0 0 10px rgba(78, 192, 90, 0.35);
 }
 .entry.coderadio-current > .code-text {
-	background: rgba(74, 192, 90, 0.12);
+	background: rgba(78, 192, 90, 0.18) !important;
+	color: #f0fff0 !important;
+}
+.coderadio-track.coderadio-current {
+	background: rgba(78, 192, 90, 0.45);
+	border-left: 3px solid #4ec05a;
+	box-shadow: 0 0 10px rgba(78, 192, 90, 0.30);
+	padding-left: 6px;
+}
+
+/* When the viz is on, unselected rows go translucent so the milkdrop
+ * bleeds through the library scroll. The selected row stays bold and
+ * solid green so it always pops against the busy backdrop. */
+html.viz-active .entry:not(.coderadio-current) {
+	background: rgba(25, 28, 34, 0.30) !important;
+	border-color: rgba(255, 255, 255, 0.08) !important;
+}
+html.viz-active .entry:not(.coderadio-current) > .code-text {
+	background: rgba(25, 28, 34, 0.20) !important;
+}
+html.viz-active .coderadio-track:not(.coderadio-current) {
+	background: rgba(25, 28, 34, 0.20);
 }
 .coderadio-track-meta {
 	flex: 1 1 auto;
