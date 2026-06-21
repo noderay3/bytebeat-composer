@@ -1,0 +1,49 @@
+name: Deploy to Cloudflare Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  deployments: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Static-only deploy dir. We exclude source / build config /
+      # PHP shims / READMEs / .git so Cloudflare only sees what the
+      # browser actually needs. The committed build/ is shipped as-is;
+      # if you change src/ locally, run `npm start` and commit the new
+      # build/ before pushing.
+      - name: Build deploy dir
+        run: |
+          mkdir -p _deploy
+          rsync -a \
+            --exclude=node_modules \
+            --exclude=.git \
+            --exclude=.github \
+            --exclude=src \
+            --exclude=scripts \
+            --exclude='package*.json' \
+            --exclude=rollup.config.mjs \
+            --exclude=eslint.config.mjs \
+            --exclude='*.md' \
+            --exclude='LICENSE*' \
+            --exclude=bytebeat.php \
+            --exclude='settings*.php' \
+            --exclude=.htaccess \
+            --exclude=_deploy \
+            ./ _deploy/
+          du -sh _deploy
+
+      - name: Deploy to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy _deploy --project-name=bytebeat-composer --branch=main --commit-dirty=true
