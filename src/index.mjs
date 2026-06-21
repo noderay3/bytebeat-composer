@@ -666,15 +666,18 @@ globalThis.bytebeat = new class {
 		// Drive a silent <audio> element so iOS Safari renders the lock
 		// screen / Control Center Now Playing widget (it ignores pure
 		// WebAudio for that purpose) and keeps the audio session alive
-		// when the user leaves the tab.
-		//
-		// Important: once started, NEVER pause this — pausing it makes
-		// the browser drop our navigator.mediaSession ownership, and
-		// macOS routes the next F7/F8/F9 to whatever other app is
-		// "playing" (Music.app, VLC, etc.) instead of back to us. The
-		// audio is PCM zeros so leaving it running costs nothing audible.
-		if(this._silentAudio && isPlaying) {
-			this._silentAudio.play().catch(() => {});
+		// when the user leaves the tab. Pause it on bytebeat pause —
+		// keeping it running confuses the browser into firing the
+		// 'pause' action on every F8 press (it sees the silent stream
+		// as ongoing playback). Trade-off: while bytebeat is paused,
+		// other audio apps (Music.app, VLC, Spotify) can take over the
+		// macOS media-key slot. Documented in README.
+		if(this._silentAudio) {
+			if(isPlaying) {
+				this._silentAudio.play().catch(() => {});
+			} else {
+				this._silentAudio.pause();
+			}
 		}
 	}
 	receiveData(data) {
