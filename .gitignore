@@ -4,3 +4,4 @@ settings.php
 # Upstream gitignores build/ (devs build locally + deploy via their own
 # pipeline). Our fork commits the rollup output so Cloudflare Pages can
 # serve the repo as-is without a build step.
+_deploy/
