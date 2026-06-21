@@ -296,14 +296,27 @@ globalThis.bytebeat = new class {
 		// Next/Prev has tracks immediately. Without this, the universe
 		// stays empty until the user manually expands a library section,
 		// and the radio buttons appear non-functional.
-		(function autoLoadClassicLibrary() {
+		//
+		// This is async (fetch + ungzip + innerHTML), so everything that
+		// depends on the universe being populated — restoreLastTrack,
+		// _syncNowRating, _updateCurrent — must wait for it to resolve.
+		(async function autoLoadClassicAndRestore() {
 			const classicContainer = document.getElementById('library-classic');
-			if(!classicContainer) return;
-			const summary = classicContainer.previousElementSibling;
-			if(summary && summary.classList.contains('library-header')) {
-				try { library.onclickLibraryHeader(summary); }
-				catch(e) { console.error('auto-load Classic failed:', e); }
+			if(classicContainer) {
+				const summary = classicContainer.previousElementSibling;
+				if(summary && summary.classList.contains('library-header')) {
+					try { await library.onclickLibraryHeader(summary); }
+					catch(e) { console.error('auto-load Classic failed:', e); }
+				}
 			}
+			// Now the universe is seeded with Classic entries. Restore the
+			// last-played track and sync the UI. If these ran before the
+			// async library load resolved, the universe would be empty and
+			// restoreLastTrack would silently give up — leaving rating
+			// chips disabled and the track-row unhighlighted on page load.
+			radio.restoreLastTrack();
+			this._syncNowRating();
+			trackList._updateCurrent();
 		})();
 		// Keep the player-area rating chips in sync with the current track's
 		// state — on 'current' (a new track loaded) or 'rating' (chip
@@ -329,14 +342,6 @@ globalThis.bytebeat = new class {
 			e.preventDefault();
 			visualizer.randomPreset();
 		});
-		// Try to resume the last-played track (no-op if its source library
-		// hasn't been opened yet). Sync the rating chips + track highlight
-		// AFTER restore so they see the restored track. Previously both ran
-		// before restoreLastTrack, so on page-load the rating buttons were
-		// stuck disabled and the currently-playing row stayed unhighlighted.
-		radio.restoreLastTrack();
-		this._syncNowRating();
-		trackList._updateCurrent();
 	}
 
 	_syncNowRating() {
