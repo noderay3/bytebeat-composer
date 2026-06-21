@@ -309,15 +309,29 @@ globalThis.bytebeat = new class {
 					catch(e) { console.error('auto-load Classic failed:', e); }
 				}
 			}
-			// Now the universe is seeded with Classic entries. Restore the
-			// last-played track and sync the UI. If these ran before the
-			// async library load resolved, the universe would be empty and
-			// restoreLastTrack would silently give up — leaving rating
-			// chips disabled and the track-row unhighlighted on page load.
+			// Now the universe is seeded. Try to resume the last-played
+			// track. If this is a fresh session (incognito / first visit),
+			// default to "the 42 melody" — the canonical bytebeat one-liner.
 			radio.restoreLastTrack();
+			if(!radio.currentTrack) {
+				const universe = trackList.getKnownTracks();
+				const def = universe.find(t => t.hash === "e295af172c127b1f527c823ad0aeaeda");
+				if(def) radio.setCurrent(def);
+			}
+			// Default shuffle ON for new sessions so visitors land in
+			// radio mode immediately. The first click of 🔀 toggles it off.
+			if(localStorage.getItem("coderadio.modes") === null) {
+				radio.setMode("shuffle", true);
+			}
+			this._syncRadioToolbar();
 			this._syncNowRating();
 			trackList._updateCurrent();
-		})();
+			// Auto-play so the 42 melody starts on first visit. If we
+			// restored a previous track, radioAdvance plays that instead.
+			if(!this.isPlaying && radio.currentTrack) {
+				radioLoadAndPlay(radio.currentTrack);
+			}
+			})();
 		// Keep the player-area rating chips in sync with the current track's
 		// state — on 'current' (a new track loaded) or 'rating' (chip
 		// clicked, either from the player or from a library row).
