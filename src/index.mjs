@@ -409,18 +409,41 @@ globalThis.bytebeat = new class {
 		if(!('mediaSession' in navigator)) {
 			return;
 		}
-		navigator.mediaSession.setActionHandler('play', () => {
+		const ms = navigator.mediaSession;
+		// Play / Pause: composer's built-in audio toggle. The
+		// playbackState writes keep the OS Now Playing widget's
+		// play/pause icon accurate.
+		ms.setActionHandler('play', () => {
 			this.playbackToggle(true, true);
-			this.postCoderadio('play');
+			ms.playbackState = 'playing';
 		});
-		navigator.mediaSession.setActionHandler('pause', () => {
+		ms.setActionHandler('pause', () => {
 			this.playbackToggle(false, true);
-			this.postCoderadio('pause');
+			ms.playbackState = 'paused';
 		});
+		// Next / Previous: walk the radio's active library list
+		// (sequential or weighted-shuffle depending on mode).
 		try {
-			navigator.mediaSession.setActionHandler('nexttrack', () => this.postCoderadio('next'));
-			navigator.mediaSession.setActionHandler('previoustrack', () => this.postCoderadio('previous'));
-		} catch(e) { /* unsupported in older WebKit */ }
+			ms.setActionHandler('nexttrack',     () => this.radioAdvance(1));
+			ms.setActionHandler('previoustrack', () => this.radioAdvance(-1));
+		} catch(e) { /* unsupported in older browsers */ }
+		// Keep the OS widget's metadata + play state in sync with
+		// whatever the radio just loaded. Fires on Next/Prev, user
+		// track-clicks, and last-track restore on page open.
+		radio.subscribe(ev => {
+			if(ev.type !== 'current' || !ev.track) return;
+			const t = ev.track;
+			const title = (t.description && String(t.description).trim()) ||
+				(t.code ? String(t.code).slice(0, 60) : 'bytebeat');
+			try {
+				ms.metadata = new MediaMetadata({
+					title,
+					artist: t.author || 'unknown',
+					album:  'bytebeat-composer',
+				});
+			} catch(_) {}
+			ms.playbackState = 'playing';
+		});
 	}
 	// Bridge to CodeRadio's RadioStation. No-op when running in a browser
 	// without the WKScriptMessageHandler registered (e.g. dev preview).
