@@ -16,7 +16,9 @@ Browser-only. Pure static site. Open the URL, click a track, hit Next.
 - **Currently-playing highlight + auto-scroll** — the playing row is highlighted in both Favorites and the library; the scroll buffer follows it on Next/Prev. Collapsed ancestor `<details>` (including the upstream's "X more bytebeats" overflow toggles) auto-open so the highlight is always visible.
 - **Player-area rating chips** — 👍 👎 ⭐ next to the radio controls operate on the currently-playing track; state mirrors the per-row chips.
 - **Bytebeat reference panel** — sliding side panel (the `ref` button or the chevron at the right edge) with operator tables, idiom recipes, mode docs, sample-rate cheat-table, gotchas, famous one-liners. Every "Try" button is verified audible by `scripts/audit-legend.mjs`.
-- **Background Milkdrop visualizer** — 👁 toggles a full-viewport [Butterchurn](https://github.com/jberg/butterchurn) animation behind the editor. UI containers go translucent so the visualization bleeds through. **Space** cycles to a random preset (gated on no editable element being focused, so typing space in the editor still inserts a space).
+- **Background Milkdrop visualizer** — 👁 toggles a full-viewport [Butterchurn](https://github.com/jberg/butterchurn) animation behind the editor. UI containers go translucent so the visualization bleeds through. **Space** cycles to a random preset (gated on no editable element being focused, so typing space in the editor still inserts a space). 🔁 auto-cycles presets on detected bass kicks (~6s min, ~18s max). On first 👁 enable the four bigger butterchurn-presets packs lazy-load from `vendor/` (~2.5MB extra → ~2700 presets total).
+- **Vibing-cat overlay** — 🐱 toggles a 264-frame sprite of the catJAM meme inside the editor canvas, layered above the visualizer and below the code text. Driven by a real-time beat-detection + dance pipeline (spectral-flux or hybrid SuperFlux/Viterbi detectors × Classic / Groove / Expressive dance engines). **Long-press** the 🐱 button to cycle the 6 detector × engine combos. See the catJAM section below for attribution.
+- **In-app help** — ❓ pops a modal with the button reference, additions, and credits — useful on mobile where tooltips don't fire.
 
 ## Run locally
 
@@ -52,6 +54,16 @@ The upstream's `src/`, `data/library/`, `data/songs/`, `style.css`, `index.html`
 
 Upstream's original README is preserved at [UPSTREAM-README.md](UPSTREAM-README.md).
 
+## Vibing Cat / catJAM sprite
+
+The 264-frame cat sprite (`vendor/cat-sprite.webp`) is derived from the "Vibing Cat" / catJAM internet meme. I am not the original creator of the source footage; the frames were extracted, arranged into a 12×22 sprite atlas, and wired to a real-time beat-detection + dance-engine pipeline so the cat dances to whatever audio the user plays. The atlas is included here in good faith as a transformative, non-commercial, artistic and educational use — to demonstrate audio-DSP techniques (spectral flux, SuperFlux onset detection, Viterbi tempo tracking, phase-locked dance dynamics) rather than to redistribute the source footage as-is.
+
+If you are the original creator or rights-holder of the source footage and would prefer the asset be removed, please open an [issue](https://github.com/noderay3/bytebeat-composer/issues) or email **xaos11@gmail.com** — the sprite will be removed and the site re-deployed promptly.
+
+The rest of the project (source code, dance engines, beat detectors) is MIT-licensed; the cat sprite itself is *not* relicensed by this project, and is included subject to the notice above.
+
+This is a personal judgment call, not legal advice.
+
 ## License
 
-MIT, matching upstream.
+MIT, matching upstream — applies to source code only. See the catJAM section above for the sprite atlas.

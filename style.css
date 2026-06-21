@@ -2628,4 +2628,106 @@ html.cat-active .cm-gutters {
 	transform: translate(-50%, 0);
 }
 
+/* Help modal (❓ button). Full-viewport backdrop + centered card; click
+ * the backdrop or X (both data-help-dismiss) or Esc to close. */
+#coderadio-help-modal {
+	position: fixed;
+	inset: 0;
+	z-index: 200;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 16px;
+}
+#coderadio-help-modal.is-hidden {
+	display: none;
+}
+.coderadio-help-backdrop {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.72);
+	cursor: pointer;
+}
+.coderadio-help-card {
+	position: relative;
+	max-width: 640px;
+	width: 100%;
+	max-height: calc(100vh - 32px);
+	overflow-y: auto;
+	background: #181c22;
+	color: #d8e2f0;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 12px;
+	box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6);
+	padding: 28px 32px 24px;
+	font-size: 14px;
+	line-height: 1.5;
+}
+.coderadio-help-close {
+	position: absolute;
+	top: 10px;
+	right: 12px;
+	width: 32px;
+	height: 32px;
+	border: none;
+	background: transparent;
+	color: #888c95;
+	font-size: 24px;
+	line-height: 1;
+	cursor: pointer;
+	border-radius: 6px;
+}
+.coderadio-help-close:hover { color: #fff; background: rgba(255, 255, 255, 0.08); }
+.coderadio-help-card h2 {
+	margin: 0 0 8px;
+	font-size: 18px;
+	color: #fff;
+}
+.coderadio-help-card h3 {
+	margin: 18px 0 6px;
+	font-size: 14px;
+	color: #8ae09e;
+	letter-spacing: 0.03em;
+	text-transform: uppercase;
+}
+.coderadio-help-lede {
+	color: #b0b8c3;
+	margin: 0 0 4px;
+}
+.coderadio-help-card a {
+	color: #6fb0ff;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.coderadio-help-card ul {
+	margin: 6px 0 0;
+	padding-left: 20px;
+}
+.coderadio-help-card li { margin: 4px 0; }
+.coderadio-help-card kbd {
+	display: inline-block;
+	padding: 1px 6px;
+	background: #2a2f38;
+	border: 1px solid #3a414d;
+	border-radius: 4px;
+	font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+	font-size: 12px;
+}
+.coderadio-help-btns {
+	display: grid;
+	grid-template-columns: max-content 1fr;
+	gap: 6px 14px;
+	margin: 6px 0 0;
+}
+.coderadio-help-btns dt {
+	font-weight: 600;
+	color: #fff;
+}
+.coderadio-help-btns dd { margin: 0; color: #c4cdd8; }
+.coderadio-help-icon {
+	display: inline-block;
+	min-width: 1.5em;
+	text-align: center;
+}
+
 

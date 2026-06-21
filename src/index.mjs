@@ -155,6 +155,7 @@ globalThis.bytebeat = new class {
 			case 'control-viz-next': visualizer.nextPreset(); break;
 			case 'control-viz-auto': visualizer.toggleAutoChange(); break;
 			case 'control-cat': vibingCat.toggle(); break;
+			case 'control-help': this._toggleHelpModal(true); break;
 			case 'control-compact': {
 				const on = !document.body.classList.contains('compact-mode');
 				document.body.classList.toggle('compact-mode', on);
@@ -405,12 +406,35 @@ globalThis.bytebeat = new class {
 		ui.containerFixed.addEventListener('keydown', this);
 		ui.containerScroll.addEventListener('mouseover', this);
 		this.setupMediaSession();
+		this._setupHelpModal();
 	}
 	// Hook hardware media keys + Control Center / Touch Bar Now Playing.
 	// macOS routes media keys to whichever process owns the active audio
 	// session — that's WebKit for us, so we have to handle them in JS via
 	// the Web MediaSession API rather than relying on the native
 	// MPRemoteCommandCenter wired on the Swift side.
+	_setupHelpModal() {
+		const modal = document.getElementById('coderadio-help-modal');
+		if(!modal) return;
+		modal.addEventListener('click', (e) => {
+			// Dismiss only when the click hits the backdrop or the X
+			// (both tagged with data-help-dismiss). Clicks on the card's
+			// content shouldn't close.
+			if(e.target.closest('[data-help-dismiss]')) {
+				this._toggleHelpModal(false);
+			}
+		});
+		document.addEventListener('keydown', (e) => {
+			if(e.key === 'Escape' && !modal.classList.contains('is-hidden')) {
+				this._toggleHelpModal(false);
+			}
+		});
+	}
+	_toggleHelpModal(show) {
+		const modal = document.getElementById('coderadio-help-modal');
+		if(!modal) return;
+		modal.classList.toggle('is-hidden', !show);
+	}
 	setupMediaSession() {
 		if(!('mediaSession' in navigator)) {
 			return;
@@ -643,12 +667,14 @@ globalThis.bytebeat = new class {
 		// screen / Control Center Now Playing widget (it ignores pure
 		// WebAudio for that purpose) and keeps the audio session alive
 		// when the user leaves the tab.
-		if(this._silentAudio) {
-			if(isPlaying) {
-				this._silentAudio.play().catch(() => {});
-			} else {
-				this._silentAudio.pause();
-			}
+		//
+		// Important: once started, NEVER pause this — pausing it makes
+		// the browser drop our navigator.mediaSession ownership, and
+		// macOS routes the next F7/F8/F9 to whatever other app is
+		// "playing" (Music.app, VLC, etc.) instead of back to us. The
+		// audio is PCM zeros so leaving it running costs nothing audible.
+		if(this._silentAudio && isPlaying) {
+			this._silentAudio.play().catch(() => {});
 		}
 	}
 	receiveData(data) {

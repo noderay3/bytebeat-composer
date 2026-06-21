@@ -22,6 +22,53 @@
 <body>
 	<canvas id="coderadio-viz-canvas" aria-label="Visualizer background"></canvas>
 	<div id="coderadio-cat-toast" role="status" aria-live="polite"></div>
+	<div id="coderadio-help-modal" class="is-hidden" role="dialog" aria-modal="true" aria-labelledby="coderadio-help-title">
+		<div class="coderadio-help-backdrop" data-help-dismiss></div>
+		<div class="coderadio-help-card" role="document">
+			<button id="coderadio-help-close" class="coderadio-help-close" aria-label="Close help" data-help-dismiss>×</button>
+			<h2 id="coderadio-help-title">bytebeat-composer · radio fork</h2>
+			<p class="coderadio-help-lede">A fork of <a href="https://github.com/SthephanShinkufag/bytebeat-composer" target="_blank" rel="noopener">SthephanShi's bytebeat-composer</a> with a radio mode, ratings, a sliding reference, a Milkdrop background visualizer, and a beat-reactive vibing-cat overlay.</p>
+
+			<section>
+				<h3>What this fork adds</h3>
+				<ul>
+					<li><strong>Radio mode</strong> — every library entry you expand joins a queue you can walk with ⏮ ⏭ or shuffle.</li>
+					<li><strong>Per-track ratings</strong> — 👍 boosts in shuffle (3× weight), 👎 excludes, ⭐ pins to a Favorites section.</li>
+					<li><strong>Bytebeat reference panel</strong> — sliding side panel with operator tables, idiom recipes, and audible <em>Try</em> buttons. Open with <strong>ref</strong> (top toolbar) or the chevron at the right edge.</li>
+					<li><strong>Milkdrop visualizer</strong> — ~2700 Butterchurn presets, lazy-loaded on first toggle. Auto-cycles on detected bass kicks.</li>
+					<li><strong>Vibing cat overlay</strong> — a 264-frame sprite of the catJAM meme, driven by ported beat-detection + dance engines from a separate iOS project.</li>
+				</ul>
+			</section>
+
+			<section>
+				<h3>Toolbar buttons</h3>
+				<dl class="coderadio-help-btns">
+					<dt><span class="coderadio-help-icon">🎛</span></dt><dd>Compact UI — hide the composer controls (default on mobile)</dd>
+					<dt><span class="coderadio-help-icon">⏮ ⏭</span></dt><dd>Previous / next track in the radio queue</dd>
+					<dt><span class="coderadio-help-icon">🔀</span></dt><dd>Shuffle — weighted-random next from the active pool</dd>
+					<dt><span class="coderadio-help-icon">⭐🔒</span></dt><dd>Lock to favorites — play only ⭐'d tracks</dd>
+					<dt><span class="coderadio-help-icon">👁</span></dt><dd>Toggle the Butterchurn (Milkdrop) visualizer</dd>
+					<dt><span class="coderadio-help-icon">🎲</span></dt><dd>Next random visualizer preset (or hit <kbd>Space</kbd> when not typing)</dd>
+					<dt><span class="coderadio-help-icon">🔁</span></dt><dd>Auto-cycle visualizer presets — hard cuts on bass kicks, ~18s max</dd>
+					<dt><span class="coderadio-help-icon">🐱</span></dt><dd>Vibing cat. <strong>Long-press</strong> cycles 6 detector × dance-engine combos</dd>
+					<dt><span class="coderadio-help-icon">👍 👎 ⭐</span></dt><dd>Rate the currently-playing track</dd>
+					<dt><span class="coderadio-help-icon">ref</span></dt><dd>Open the bytebeat reference panel (left side)</dd>
+					<dt><span class="coderadio-help-icon">❓</span></dt><dd>This help</dd>
+				</dl>
+			</section>
+
+			<section>
+				<h3>Credits</h3>
+				<ul>
+					<li><a href="https://github.com/SthephanShinkufag/bytebeat-composer" target="_blank" rel="noopener">bytebeat-composer</a> — SthephanShi, MIT</li>
+					<li><a href="https://github.com/jberg/butterchurn" target="_blank" rel="noopener">Butterchurn</a> + <a href="https://github.com/jberg/butterchurn-presets" target="_blank" rel="noopener">butterchurn-presets</a> — Jordan Berg, MIT</li>
+					<li><a href="http://countercomplex.blogspot.com/2011/10/algorithmic-symphonies-from-one-line-of.html" target="_blank" rel="noopener">viznut</a> — invented bytebeat in 2011</li>
+					<li><strong>The Tuesday Night Machines</strong> &amp; <strong>Ravary</strong> — reference-panel sources</li>
+					<li><strong>Vibing Cat / catJAM</strong> sprite — derived from the popular meme footage, included in good faith as transformative non-commercial use; see the <a href="https://github.com/noderay3/bytebeat-composer#vibing-cat--catjam-sprite" target="_blank" rel="noopener">README</a> for attribution + takedown contact</li>
+				</ul>
+			</section>
+		</div>
+	</div>
 	<main id="content">
 		<section id="container-fixed">
 			<div id="editor-container" aria-label="Code editor">
@@ -127,6 +174,7 @@
 					<button id="control-viz-next" class="control-button" title="Next visualizer preset (Space)">🎲</button>
 					<button id="control-viz-auto" class="control-button" title="Auto-cycle presets — hard-cuts on bass kicks, max ~18s between swaps">🔁</button>
 					<button id="control-cat" class="control-button" title="Vibing cat (long-press to cycle detector × engine combos)">🐱</button>
+					<button id="control-help" class="control-button" title="What is this? / button reference">❓</button>
 				</div>
 				<div class="controls-group coderadio-now-rating" id="coderadio-now-rating" title="Rate the currently-playing track">
 					<button id="control-rate-up" class="control-button coderadio-rate-btn" disabled title="Thumbs up — boosts in shuffle">👍</button>
