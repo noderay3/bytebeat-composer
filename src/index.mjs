@@ -421,12 +421,38 @@ globalThis.bytebeat = new class {
 			this.playbackToggle(false, true);
 			ms.playbackState = 'paused';
 		});
+		// Some OSes route to a single toggle action instead of separate
+		// play/pause. Register the toggle as a safety net so a single
+		// keypress always flips state correctly.
+		try {
+			ms.setActionHandler('togglePlayPause', () => {
+				const next = !this.isPlaying;
+				this.playbackToggle(next, true);
+				ms.playbackState = next ? 'playing' : 'paused';
+			});
+		} catch(e) {}
 		// Next / Previous: walk the radio's active library list
 		// (sequential or weighted-shuffle depending on mode).
 		try {
 			ms.setActionHandler('nexttrack',     () => this.radioAdvance(1));
 			ms.setActionHandler('previoustrack', () => this.radioAdvance(-1));
 		} catch(e) { /* unsupported in older browsers */ }
+		// Silent <audio> element — iOS Safari needs a real media element
+		// (not just WebAudio) to render the lock screen / Control Center
+		// Now Playing widget AND to keep the audio session alive when the
+		// user leaves the tab. The src is an inline base64 PCM-zeros WAV
+		// (silent, ~120 bytes); it loops forever while bytebeat is
+		// playing. playbackToggle wires the play/pause.
+		const SILENT_WAV = 'data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQAAAAA=';
+		const silent = document.createElement('audio');
+		silent.src = SILENT_WAV;
+		silent.loop = true;
+		silent.preload = 'auto';
+		silent.setAttribute('playsinline', '');
+		silent.setAttribute('aria-hidden', 'true');
+		silent.style.display = 'none';
+		document.body.appendChild(silent);
+		this._silentAudio = silent;
 		// Keep the OS widget's metadata + play state in sync with
 		// whatever the radio just loaded. Fires on Next/Prev, user
 		// track-clicks, and last-track restore on page open.
@@ -597,6 +623,25 @@ globalThis.bytebeat = new class {
 			this.sendData({ isPlaying, playbackSpeed: this.playbackSpeed });
 		} else {
 			this.isNeedClear = true;
+		}
+		// Keep the OS Now Playing widget in sync regardless of how
+		// play/pause was triggered (toolbar button, canvas click, media
+		// keys, etc). Without this, macOS Now Playing routes F8 to the
+		// stale state — e.g. you pause via the on-screen button, then
+		// F8 fires 'pause' again instead of 'play'.
+		if('mediaSession' in navigator) {
+			navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
+		}
+		// Drive a silent <audio> element so iOS Safari renders the lock
+		// screen / Control Center Now Playing widget (it ignores pure
+		// WebAudio for that purpose) and keeps the audio session alive
+		// when the user leaves the tab.
+		if(this._silentAudio) {
+			if(isPlaying) {
+				this._silentAudio.play().catch(() => {});
+			} else {
+				this._silentAudio.pause();
+			}
 		}
 	}
 	receiveData(data) {
