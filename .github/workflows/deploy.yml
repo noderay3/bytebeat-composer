@@ -12,7 +12,7 @@ permissions:
 # Serialize deploys so a fast push (or workflow_dispatch on top of a
 # push) doesn't race two uploads to the same project.
 concurrency:
-  group: cf-pages-bytebeat-composer
+  group: cf-pages-bytebeat-radio
   cancel-in-progress: false
 
 jobs:
@@ -56,6 +56,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           npx --yes wrangler@latest pages deploy _deploy \
-            --project-name=bytebeat-composer \
+            --project-name=bytebeat-radio \
             --branch=main \
             --commit-dirty=true
