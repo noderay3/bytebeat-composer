@@ -45,6 +45,16 @@ jobs:
       # broader scope than our minimal Pages:Edit token. npx wrangler
       # directly works fine with just that permission (this is the same
       # command we run for manual deploys).
+      - name: Sanity-check secrets (length + prefix only, never the secret itself)
+        env:
+          T: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          A: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          echo "token length: ${#T} (expect 53)"
+          echo "token prefix: ${T:0:8} (expect cfat_37Y)"
+          echo "account length: ${#A} (expect 32)"
+          echo "account prefix: ${A:0:6} (expect d2853f)"
+
       - name: Deploy to Cloudflare Pages
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
