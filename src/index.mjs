@@ -671,10 +671,26 @@ globalThis.bytebeat = new class {
 		scope.canvasPlayButton.classList.toggle('canvas-pause', isPlaying);
 		if(isPlaying) {
 			scope.canvasPlayButton.classList.remove('canvas-initial');
-			if(this.audioCtx.resume) {
-				this.audioCtx.resume();
-				scope.requestAnimationFrame(); // Main call for drawing in the scope
-			}
+			// Start the silent keepalive <audio> BEFORE resuming the
+			// AudioContext, not after. Mobile browsers are far more
+			// willing to honor a media-session-originated gesture (a
+			// hardware play button, the lock-screen widget) against a
+			// real <audio> element's .play() than against a bare
+			// AudioContext.resume() call — that's literally the use
+			// case the element exists for. Chaining resume() off the
+			// back of a successful silent.play() gives it the best shot
+			// at inheriting that same activation. Without this order, a
+			// resume from the OS widget could flip the on-screen icon
+			// (we still set isPlaying/playbackState optimistically below)
+			// while the AudioContext silently fails to actually resume —
+			// looks like nothing happened, audio never restarts.
+			const unlock = this._silentAudio ? this._silentAudio.play().catch(() => {}) : Promise.resolve();
+			unlock.then(() => {
+				if(this.audioCtx.resume) {
+					this.audioCtx.resume().catch(e => console.warn('[audio] resume failed:', e));
+				}
+			});
+			scope.requestAnimationFrame(); // Main call for drawing in the scope
 		} else {
 			this.lastUpdateTime = 0;
 			this.updateCounter = 0;
@@ -702,14 +718,10 @@ globalThis.bytebeat = new class {
 		if('mediaSession' in navigator) {
 			navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 		}
-		// Drive a silent <audio> element so iOS Safari renders the lock
-		// screen / Control Center Now Playing widget (it ignores pure
-		// WebAudio for that purpose) and keeps the audio session alive
-		// when the user leaves the tab.
-		//
-		// Desktop vs mobile need OPPOSITE behavior here, because each
-		// platform uses a different signal to decide what a hardware
-		// media-key press means:
+		// Pausing the silent keepalive <audio> element (started above, in
+		// the isPlaying branch) needs OPPOSITE behavior on desktop vs
+		// mobile, because each platform uses a different signal to
+		// decide what a hardware media-key press means:
 		//
 		// - Desktop (macOS F7/F8/F9): Chrome/Safari route the key based
 		//   on whether an <audio> element is ACTUALLY producing samples,
@@ -728,12 +740,8 @@ globalThis.bytebeat = new class {
 		//   mobile we keep the silent loop running through pause/resume
 		//   and rely on mediaSession.playbackState alone for the OS
 		//   widget's play/pause icon.
-		if(this._silentAudio) {
-			if(isPlaying) {
-				this._silentAudio.play().catch(() => {});
-			} else if(!IS_MOBILE_PLATFORM) {
-				this._silentAudio.pause();
-			}
+		if(!isPlaying && this._silentAudio && !IS_MOBILE_PLATFORM) {
+			this._silentAudio.pause();
 		}
 	}
 	receiveData(data) {
