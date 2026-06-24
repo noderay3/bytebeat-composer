@@ -513,9 +513,18 @@ globalThis.bytebeat = new class {
 		silent.style.display = 'none';
 		document.body.appendChild(silent);
 		this._silentAudio = silent;
-		// Keep the OS widget's metadata + play state in sync with
-		// whatever the radio just loaded. Fires on Next/Prev, user
-		// track-clicks, and last-track restore on page open.
+		// Keep the OS widget's metadata in sync with whatever the radio
+		// just loaded. Fires on Next/Prev, user track-clicks, and
+		// last-track restore on page open.
+		//
+		// playbackState must reflect this.isPlaying, NOT be hardcoded to
+		// 'playing' — a track can become "current" on page load (default
+		// 42-melody, restored last track) before the user has pressed
+		// play, since we deliberately don't auto-play (browser autoplay
+		// policy). Claiming 'playing' while no audio is actually flowing
+		// makes some mobile browsers treat the media session as a dead
+		// session — the OS widget stays visible but stops forwarding
+		// button presses to the page entirely.
 		radio.subscribe(ev => {
 			if(ev.type !== 'current' || !ev.track) return;
 			const t = ev.track;
@@ -528,7 +537,7 @@ globalThis.bytebeat = new class {
 					album:  'bytebeat-composer',
 				});
 			} catch(_) {}
-			ms.playbackState = 'playing';
+			ms.playbackState = this.isPlaying ? 'playing' : 'paused';
 		});
 	}
 	// Bridge to CodeRadio's RadioStation. No-op when running in a browser
