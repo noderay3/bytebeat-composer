@@ -17,6 +17,9 @@ const scope = new Scope();
 const ui = new UI();
 const visualizer = new Visualizer();
 const vibingCat = new VibingCat();
+// Desktop F7/F8/F9 vs mobile Bluetooth AVRCP need OPPOSITE silent-audio
+// keepalive strategies — see the long comment in playbackToggle().
+const IS_MOBILE_PLATFORM = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 /// Load a track via the bytebeat composer, fetching its code from
 /// data/songs/<type>/<hash>.js if it's a file-based library entry
 /// (no inline code in the upstream library HTML). Without this fetch
@@ -693,16 +696,33 @@ globalThis.bytebeat = new class {
 		// Drive a silent <audio> element so iOS Safari renders the lock
 		// screen / Control Center Now Playing widget (it ignores pure
 		// WebAudio for that purpose) and keeps the audio session alive
-		// when the user leaves the tab. Pause it on bytebeat pause —
-		// keeping it running confuses the browser into firing the
-		// 'pause' action on every F8 press (it sees the silent stream
-		// as ongoing playback). Trade-off: while bytebeat is paused,
-		// other audio apps (Music.app, VLC, Spotify) can take over the
-		// macOS media-key slot. Documented in README.
+		// when the user leaves the tab.
+		//
+		// Desktop vs mobile need OPPOSITE behavior here, because each
+		// platform uses a different signal to decide what a hardware
+		// media-key press means:
+		//
+		// - Desktop (macOS F7/F8/F9): Chrome/Safari route the key based
+		//   on whether an <audio> element is ACTUALLY producing samples,
+		//   not on navigator.mediaSession.playbackState. If we leave the
+		//   silent element playing while paused, the OS thinks the page
+		//   is still "playing" and F8 always sends 'pause' — you can
+		//   never resume from the keyboard. So on desktop we pause it
+		//   in lockstep with bytebeat. Trade-off: while paused, another
+		//   app (Music.app, VLC, Spotify) can take the macOS media-key
+		//   slot — documented in the README.
+		// - Mobile (Bluetooth AVRCP / lock-screen widget): the opposite
+		//   problem. Once the silent element is actually .pause()'d,
+		//   iOS/Android tear down the active media session entirely —
+		//   the Now Playing widget disappears and there's no live
+		//   session left for the earbuds' "play" button to reach. So on
+		//   mobile we keep the silent loop running through pause/resume
+		//   and rely on mediaSession.playbackState alone for the OS
+		//   widget's play/pause icon.
 		if(this._silentAudio) {
 			if(isPlaying) {
 				this._silentAudio.play().catch(() => {});
-			} else {
+			} else if(!IS_MOBILE_PLATFORM) {
 				this._silentAudio.pause();
 			}
 		}
