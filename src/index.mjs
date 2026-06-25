@@ -365,6 +365,13 @@ globalThis.bytebeat = new class {
 			this._syncRadioToolbar();
 			this._syncNowRating();
 			trackList._updateCurrent();
+			// restoreLastTrack() sets currentTrack WITHOUT emitting a
+			// 'current' event (the manual syncs above stand in for the other
+			// subscribers), so the media-session metadata subscriber never
+			// fires on a page-load restore. Prime the Now Playing card here,
+			// or it shows the page <title> ("Bytebeat composer") until the
+			// first Next.
+			this._updateMediaMetadata();
 			// Load the restored/default track's code into the editor so the
 			// user sees it immediately, but DON'T auto-start playback — the
 			// browser's autoplay policy keeps the AudioContext suspended
@@ -574,18 +581,30 @@ globalThis.bytebeat = new class {
 		// button presses to the page entirely.
 		radio.subscribe(ev => {
 			if(ev.type !== 'current' || !ev.track) return;
-			const t = ev.track;
-			const title = (t.description && String(t.description).trim()) ||
-				(t.code ? String(t.code).slice(0, 60) : 'bytebeat');
-			try {
-				ms.metadata = new MediaMetadata({
-					title,
-					artist: t.author || 'unknown',
-					album:  'bytebeat-composer',
-				});
-			} catch(_) {}
+			this._updateMediaMetadata();
 			ms.playbackState = this.isPlaying ? 'playing' : 'paused';
 		});
+	}
+	/// Set the OS Now Playing card's metadata from the radio's current
+	/// track. Kept separate from playbackState (which playbackToggle owns):
+	/// setting metadata on an inactive session is harmless, but claiming
+	/// playbackState='playing' with no audio flowing makes some mobile
+	/// browsers treat the session as dead. Called on every 'current' event,
+	/// once at boot after the restored/default track is established, and on
+	/// the play gesture so the card is right the instant it first appears.
+	_updateMediaMetadata() {
+		if(!('mediaSession' in navigator)) return;
+		const t = radio.currentTrack;
+		if(!t) return;
+		const title = (t.description && String(t.description).trim()) ||
+			(t.code ? String(t.code).slice(0, 60) : 'bytebeat');
+		try {
+			navigator.mediaSession.metadata = new MediaMetadata({
+				title,
+				artist: t.author || 'unknown',
+				album:  'bytebeat-composer',
+			});
+		} catch(_) {}
 	}
 	// Bridge to CodeRadio's RadioStation. No-op when running in a browser
 	// without the WKScriptMessageHandler registered (e.g. dev preview).
@@ -738,6 +757,12 @@ globalThis.bytebeat = new class {
 			if(this._sessionAudio) {
 				this._sessionAudio.play().catch(() => {});
 			}
+			// The backing element only starts here, on the play gesture, so
+			// this is the first moment the OS card appears. Refresh metadata
+			// now (synchronous, no gesture consumed) so the card shows THIS
+			// track immediately, even if the boot-time set didn't stick to a
+			// then-inactive session.
+			this._updateMediaMetadata();
 			scope.requestAnimationFrame(); // Main call for drawing in the scope
 		} else {
 			this.lastUpdateTime = 0;
