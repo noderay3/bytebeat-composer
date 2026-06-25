@@ -17,9 +17,45 @@ const scope = new Scope();
 const ui = new UI();
 const visualizer = new Visualizer();
 const vibingCat = new VibingCat();
-// Desktop F7/F8/F9 vs mobile Bluetooth AVRCP need OPPOSITE silent-audio
-// keepalive strategies — see the long comment in playbackToggle().
-const IS_MOBILE_PLATFORM = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+// A real, decodable silent WAV used purely to anchor the OS media session
+// (Android notification card, lock-screen widget, Bluetooth AVRCP, macOS
+// media keys). See setupMediaSession() for why a backing HTMLMediaElement
+// is unavoidable for procedurally-generated WebAudio.
+//
+// Built at runtime as a Blob URL rather than a checked-in file or a giant
+// base64 literal. A blob: URL decodes through the browser's normal media
+// pipeline, so Chrome grants it a media-session notification (an
+// srcObject=MediaStream element does NOT — that uses the WebRTC path,
+// which is why an earlier attempt killed the card entirely). It also ships
+// inside the JS bundle with zero deploy/path risk: nothing separate to 404
+// on Cloudflare Pages or in the iOS app bundle. 6 s clears Chrome's >5 s
+// "full audio focus" threshold; 8 kHz / 8-bit / mono keeps it ~48 KB.
+// 128 == digital zero for unsigned 8-bit PCM.
+function makeSilenceWavUrl(seconds = 6, sampleRate = 8000) {
+	const dataSize = seconds * sampleRate; // 8-bit mono → 1 byte per sample
+	const buf = new ArrayBuffer(44 + dataSize);
+	const view = new DataView(buf);
+	const writeStr = (off, str) => {
+		for(let i = 0; i < str.length; i++) {
+			view.setUint8(off + i, str.charCodeAt(i));
+		}
+	};
+	writeStr(0, 'RIFF');
+	view.setUint32(4, 36 + dataSize, true);
+	writeStr(8, 'WAVE');
+	writeStr(12, 'fmt ');
+	view.setUint32(16, 16, true);         // fmt chunk size
+	view.setUint16(20, 1, true);          // PCM
+	view.setUint16(22, 1, true);          // mono
+	view.setUint32(24, sampleRate, true); // sample rate
+	view.setUint32(28, sampleRate, true); // byte rate (1 byte/sample)
+	view.setUint16(32, 1, true);          // block align
+	view.setUint16(34, 8, true);          // bits per sample
+	writeStr(36, 'data');
+	view.setUint32(40, dataSize, true);
+	new Uint8Array(buf, 44).fill(128);    // silence
+	return URL.createObjectURL(new Blob([buf], { type: 'audio/wav' }));
+}
 /// Load a track via the bytebeat composer, fetching its code from
 /// data/songs/<type>/<hash>.js if it's a file-based library entry
 /// (no inline code in the upstream library HTML). Without this fetch
@@ -470,26 +506,18 @@ globalThis.bytebeat = new class {
 			return;
 		}
 		const ms = navigator.mediaSession;
-		// Play / Pause: composer's built-in audio toggle. The
-		// playbackState writes keep the OS Now Playing widget's
-		// play/pause icon accurate.
-		ms.setActionHandler('play', () => {
-			this.playbackToggle(true, true);
-			ms.playbackState = 'playing';
-		});
-		ms.setActionHandler('pause', () => {
-			this.playbackToggle(false, true);
-			ms.playbackState = 'paused';
-		});
+		// Play / Pause: composer's built-in audio toggle. playbackToggle()
+		// is the single owner of mediaSession.playbackState (and of the
+		// backing element's play/pause + the AudioContext resume), so the
+		// handlers just call it — no separate playbackState writes here, to
+		// avoid racing two sources of truth for the widget's icon.
+		ms.setActionHandler('play', () => this.playbackToggle(true, true));
+		ms.setActionHandler('pause', () => this.playbackToggle(false, true));
 		// Some OSes route to a single toggle action instead of separate
 		// play/pause. Register the toggle as a safety net so a single
 		// keypress always flips state correctly.
 		try {
-			ms.setActionHandler('togglePlayPause', () => {
-				const next = !this.isPlaying;
-				this.playbackToggle(next, true);
-				ms.playbackState = next ? 'playing' : 'paused';
-			});
+			ms.setActionHandler('togglePlayPause', () => this.playbackToggle(!this.isPlaying, true));
 		} catch(e) {}
 		// Next / Previous: walk the radio's active library list
 		// (sequential or weighted-shuffle depending on mode).
@@ -502,31 +530,35 @@ globalThis.bytebeat = new class {
 		// behind the session — a bare WebAudio AudioContext isn't enough
 		// to get the lock-screen widget, notification card, or hardware
 		// media keys. That's a platform constraint, not something unique
-		// to this app.
+		// to this app. The element carries makeSilenceWavUrl()'s real,
+		// decodable, >5 s looping silence so Chrome grants it "full audio
+		// focus" (persistent notification + AVRCP routing).
 		//
-		// The file (vendor/silence.wav) is 10 s of genuine PCM silence
-		// (all samples at the unsigned-8-bit zero value of 128), looped.
-		// Chrome requires ≥5 s of real decodable duration for "full"
-		// audio focus — the level that earns a persistent notification
-		// and AVRCP key routing. A shorter or zero-byte WAV doesn't
-		// qualify, which was the original root-cause bug.
-		//
-		// We start the element immediately (muted, using Chrome's
-		// muted-autoplay exemption) so the OS notification card appears
-		// on page load without waiting for the user to press Play in-app.
-		// The element is unmuted when bytebeat playback actually starts.
-		// Because the file content is pure silence, unmuting it produces
-		// no audible output.
+		// Lifecycle is deliberately the STANDARD media-app pattern:
+		// - Created here but NOT started. It is never muted and never
+		//   autoplayed on load. (Muted media gets no notification, and a
+		//   muted-then-unmuted element doesn't reliably re-activate the
+		//   session — that combination is what broke the card before.)
+		// - .play()'d on the first real play GESTURE (in-app button,
+		//   media key, lock-screen widget) in playbackToggle(). That's
+		//   when the notification card first appears — exactly like
+		//   Spotify/YouTube, which also show nothing until you hit play.
+		// - .pause()'d in lockstep with bytebeat on every pause, on ALL
+		//   platforms. Pausing a real-duration element keeps the session
+		//   alive in a "paused" state (the card stays, showing a play
+		//   button); resuming fires a genuine paused→playing transition,
+		//   which is the user-activation the suspended AudioContext needs
+		//   to wake from a backgrounded screen. (The old zero-duration
+		//   WAV couldn't survive a pause — the session was torn down,
+		//   which is why pausing from Bluetooth made the card vanish.)
 		const sessionAudio = document.createElement('audio');
-		sessionAudio.src = './vendor/silence.wav';
+		sessionAudio.src = makeSilenceWavUrl();
 		sessionAudio.loop = true;
 		sessionAudio.preload = 'auto';
-		sessionAudio.muted = true;
 		sessionAudio.setAttribute('playsinline', '');
 		sessionAudio.setAttribute('aria-hidden', 'true');
 		sessionAudio.style.display = 'none';
 		document.body.appendChild(sessionAudio);
-		sessionAudio.play().catch(() => {}); // muted autoplay — no gesture needed
 		this._sessionAudio = sessionAudio;
 		// Keep the OS widget's metadata in sync with whatever the radio
 		// just loaded. Fires on Next/Prev, user track-clicks, and
@@ -686,22 +718,26 @@ globalThis.bytebeat = new class {
 		scope.canvasPlayButton.classList.toggle('canvas-pause', isPlaying);
 		if(isPlaying) {
 			scope.canvasPlayButton.classList.remove('canvas-initial');
-			// Start the session-backing <audio> BEFORE resuming the
-			// AudioContext, not after. Mobile browsers are far more
-			// willing to honor a media-session-originated gesture (a
-			// hardware play button, the lock-screen widget) against a
-			// real <audio> element's .play() than against a bare
-			// AudioContext.resume() call — that's literally the use
-			// case the element exists for. Chaining resume() off the
-			// back of a successful play() gives it the best shot at
-			// inheriting that same activation.
-			if(this._sessionAudio) this._sessionAudio.muted = false;
-			const unlock = this._sessionAudio ? this._sessionAudio.play().catch(() => {}) : Promise.resolve();
-			unlock.then(() => {
-				if(this.audioCtx.resume) {
-					this.audioCtx.resume().catch(e => console.warn('[audio] resume failed:', e));
-				}
-			});
+			// Resume the AudioContext and start the session-backing
+			// <audio> SYNCHRONOUSLY, both inside this handler's call
+			// stack. This runs straight off a user gesture (in-app
+			// click, media key, or lock-screen 'play' action), and the
+			// gesture's activation is only valid for synchronous work —
+			// the moment we cross an `await`/`.then()` microtask
+			// boundary it's gone. The previous code chained resume()
+			// inside `play().then(...)`, so on mobile (where the OS
+			// suspends the AudioContext on screen-lock) resume() ran
+			// without activation and silently failed — the notification
+			// icon flashed to pause then snapped back with no audio.
+			// Order doesn't matter as long as both are synchronous;
+			// resume() first guarantees the context wakes even if the
+			// element is momentarily busy.
+			if(this.audioCtx.resume) {
+				this.audioCtx.resume().catch(e => console.warn('[audio] resume failed:', e));
+			}
+			if(this._sessionAudio) {
+				this._sessionAudio.play().catch(() => {});
+			}
 			scope.requestAnimationFrame(); // Main call for drawing in the scope
 		} else {
 			this.lastUpdateTime = 0;
@@ -730,30 +766,25 @@ globalThis.bytebeat = new class {
 		if('mediaSession' in navigator) {
 			navigator.mediaSession.playbackState = isPlaying ? 'playing' : 'paused';
 		}
-		// Pausing the session-backing <audio> element (started above, in
-		// the isPlaying branch) needs OPPOSITE behavior on desktop vs
-		// mobile, because each platform uses a different signal to
-		// decide what a hardware media-key press means:
+		// Pause the session-backing <audio> in lockstep with bytebeat, on
+		// ALL platforms. This is the ordinary media-app contract and it's
+		// what makes resume work everywhere:
 		//
-		// - Desktop (macOS F7/F8/F9): Chrome/Safari route the key based
-		//   on whether an <audio> element is ACTUALLY producing samples,
-		//   not on navigator.mediaSession.playbackState. If we leave the
-		//   element playing while paused, the OS thinks the page is
-		//   still "playing" and F8 always sends 'pause' — you can never
-		//   resume from the keyboard. So on desktop we pause it in
-		//   lockstep with bytebeat. Trade-off: while paused, another
-		//   app (Music.app, VLC, Spotify) can take the macOS media-key
-		//   slot — documented in the README.
-		// - Mobile (Bluetooth AVRCP / lock-screen widget): the opposite
-		//   problem. Once the element is actually .pause()'d, iOS/
-		//   Android tear down the active media session entirely — the
-		//   Now Playing widget disappears and there's no live session
-		//   left for the earbuds' "play" button to reach. So on mobile
-		//   we never pause it — it keeps streaming the real (now
-		//   silent, since bytebeat itself is paused) audioGain output
-		//   continuously, and we rely on mediaSession.playbackState
-		//   alone for the OS widget's play/pause icon.
-		if(!isPlaying && this._sessionAudio && !IS_MOBILE_PLATFORM) {
+		// - The element is a real, >5 s, decodable clip, so pausing it
+		//   leaves the media session ALIVE in a "paused" state — the Now
+		//   Playing card / lock-screen widget stays put, showing a play
+		//   button. (The old zero-duration WAV had nothing to sustain, so
+		//   a pause tore the session down and the card vanished — the
+		//   original "pause from Bluetooth makes the card disappear"
+		//   complaint. That's fixed at the source now, so the previous
+		//   mobile-only "never pause" hack, and its desktop media-key
+		//   trade-off, are both gone.)
+		// - Keeping element state and playbackState consistent (both
+		//   "paused") stops Chrome auto-correcting the notification icon.
+		// - On resume, .play() (in the isPlaying branch above) fires a
+		//   real paused->playing transition — the user-activation that a
+		//   screen-lock-suspended AudioContext needs in order to wake.
+		if(!isPlaying && this._sessionAudio) {
 			this._sessionAudio.pause();
 		}
 	}
