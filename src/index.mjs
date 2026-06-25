@@ -497,60 +497,36 @@ globalThis.bytebeat = new class {
 			ms.setActionHandler('nexttrack',     () => this.radioAdvance(1));
 			ms.setActionHandler('previoustrack', () => this.radioAdvance(-1));
 		} catch(e) { /* unsupported in older browsers */ }
-		// Backing <audio> element for OS media-session integration — a
-		// quiet REAL mirror of bytebeat's own output, not a synthetic
-		// decoy file. Android
-		// Chrome and iOS Safari still need some actual HTMLMediaElement
-		// behind the session (a WebAudio-only AudioContext isn't enough
-		// on its own to get the lock-screen widget, notification card,
-		// or hardware media keys) — that's a real platform constraint,
-		// not something this app does differently from anyone else.
+		// Backing <audio> element for OS media-session integration.
+		// Android Chrome and iOS Safari require a real HTMLMediaElement
+		// behind the session — a bare WebAudio AudioContext isn't enough
+		// to get the lock-screen widget, notification card, or hardware
+		// media keys. That's a platform constraint, not something unique
+		// to this app.
 		//
-		// What WAS wrong: this element used to play a hand-rolled base64
-		// WAV whose `data` chunk was literally zero bytes — a header
-		// with no audio samples at all. Chrome requires >=5s of real
-		// decodable media duration to grant "full" audio focus (the
-		// level needed to sustain a persistent notification and route
-		// hardware keys, vs the lesser "ducking" focus which doesn't);
-		// a zero-duration file never qualified. Worse, a `loop`ing
-		// element with zero frames has nothing to loop back to, so the
-		// browser's own session/focus state would quietly revert
-		// moments after we set playbackState = 'playing' — exactly the
-		// "icon flashes then snaps back, no audio resumes" bug.
+		// The file (vendor/silence.wav) is 10 s of genuine PCM silence
+		// (all samples at the unsigned-8-bit zero value of 128), looped.
+		// Chrome requires ≥5 s of real decodable duration for "full"
+		// audio focus — the level that earns a persistent notification
+		// and AVRCP key routing. A shorter or zero-byte WAV doesn't
+		// qualify, which was the original root-cause bug.
 		//
-		// Fix: tee the REAL audioGain output (the same signal already
-		// driving the speakers, see initAudio()) into this element via
-		// a MediaStreamAudioDestinationNode instead of a decoy file.
-		// The audible path stays the existing
-		// audioGain -> audioCtx.destination connection (full volume,
-		// untouched) — this is a second, independent copy of the signal
-		// purely for the OS/media-session integration.
-		//
-		// Deliberately NOT muting the element itself (no .muted=true,
-		// no .volume=0): a muted element risks the exact same class of
-		// bug we just fixed — some browsers' audio-focus logic may not
-		// count a muted element as "really playing" any more than it
-		// counted a zero-duration file. Instead, attenuate the SIGNAL
-		// far upstream via a dedicated near-zero (but non-zero) gain
-		// node, so the element is in every sense a normal, unmuted,
-		// audible-in-principle element — just carrying a continuously
-		// live, real, inaudibly-quiet mirror of whatever bytebeat is
-		// actually doing (proportionally quieter during quiet passages,
-		// genuine zero-valued samples while paused — never a degenerate
-		// or fake signal). That satisfies Chrome's duration/focus
-		// checks and Firefox's documented requirement for actual
-		// (non-decoy) content in the backing media, without resting
-		// anything on how any given browser version treats `muted`.
-		const sessionGain = new GainNode(this.audioCtx, { gain: 0.0001 });
-		const sessionDest = this.audioCtx.createMediaStreamDestination();
-		this.audioGain.connect(sessionGain);
-		sessionGain.connect(sessionDest);
+		// We start the element immediately (muted, using Chrome's
+		// muted-autoplay exemption) so the OS notification card appears
+		// on page load without waiting for the user to press Play in-app.
+		// The element is unmuted when bytebeat playback actually starts.
+		// Because the file content is pure silence, unmuting it produces
+		// no audible output.
 		const sessionAudio = document.createElement('audio');
-		sessionAudio.srcObject = sessionDest.stream;
+		sessionAudio.src = './vendor/silence.wav';
+		sessionAudio.loop = true;
+		sessionAudio.preload = 'auto';
+		sessionAudio.muted = true;
 		sessionAudio.setAttribute('playsinline', '');
 		sessionAudio.setAttribute('aria-hidden', 'true');
 		sessionAudio.style.display = 'none';
 		document.body.appendChild(sessionAudio);
+		sessionAudio.play().catch(() => {}); // muted autoplay — no gesture needed
 		this._sessionAudio = sessionAudio;
 		// Keep the OS widget's metadata in sync with whatever the radio
 		// just loaded. Fires on Next/Prev, user track-clicks, and
@@ -719,6 +695,7 @@ globalThis.bytebeat = new class {
 			// case the element exists for. Chaining resume() off the
 			// back of a successful play() gives it the best shot at
 			// inheriting that same activation.
+			if(this._sessionAudio) this._sessionAudio.muted = false;
 			const unlock = this._sessionAudio ? this._sessionAudio.play().catch(() => {}) : Promise.resolve();
 			unlock.then(() => {
 				if(this.audioCtx.resume) {
