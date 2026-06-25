@@ -195,6 +195,7 @@ globalThis.bytebeat = new class {
 			case 'control-viz-auto': visualizer.toggleAutoChange(); break;
 			case 'control-cat': vibingCat.toggle(); break;
 			case 'control-help': this._toggleHelpModal(true); break;
+				case 'control-settings': this._toggleSettingsModal(true); break;
 			case 'control-compact': {
 				const on = !document.body.classList.contains('compact-mode');
 				document.body.classList.toggle('compact-mode', on);
@@ -480,6 +481,7 @@ globalThis.bytebeat = new class {
 		ui.containerScroll.addEventListener('mouseover', this);
 		this.setupMediaSession();
 		this._setupHelpModal();
+		this._setupSettingsModal();
 	}
 	// Hook hardware media keys + Control Center / Touch Bar Now Playing.
 	// macOS routes media keys to whichever process owns the active audio
@@ -508,23 +510,89 @@ globalThis.bytebeat = new class {
 		if(!modal) return;
 		modal.classList.toggle('is-hidden', !show);
 	}
+		/// Settings modal (⚙️ button). Wires dismiss-on-click and
+		/// dismiss-on-Escape, guards against duplicate setup, and
+		/// syncs checkbox states to live values + localStorage.
+		_setupSettingsModal() {
+			if(this._settingsModalReady) return;
+			this._settingsModalReady = true;
+			const modal = document.getElementById('coderadio-settings-modal');
+			if(!modal) return;
+			// Dismiss on backdrop click or close-button click — any element
+			// with data-settings-dismiss closes the modal.
+			modal.querySelectorAll('[data-settings-dismiss]').forEach(el => {
+				el.addEventListener('click', () => this._toggleSettingsModal(false));
+			});
+			document.addEventListener('keydown', (e) => {
+				if(e.key === 'Escape' && !modal.classList.contains('is-hidden')) {
+					this._toggleSettingsModal(false);
+				}
+			});
+			// Wire checkboxes → live state + localStorage.
+			const otn = document.getElementById('setting-one-touch-next');
+			if(otn) {
+				otn.addEventListener('change', () => {
+					this.oneTouchNext = otn.checked;
+					try { localStorage.setItem('coderadio.oneTouchNext', otn.checked ? '1' : '0'); } catch(_) {}
+				});
+			}
+			const compact = document.getElementById('setting-compact');
+			if(compact) {
+				compact.addEventListener('change', () => {
+					document.body.classList.toggle('compact-mode', compact.checked);
+					try { localStorage.setItem('coderadio.compact', compact.checked ? '1' : '0'); } catch(_) {}
+				});
+			}
+		}
+		_syncSettingsModal() {
+			const otn = document.getElementById('setting-one-touch-next');
+			if(otn) otn.checked = this.oneTouchNext;
+			const compact = document.getElementById('setting-compact');
+			if(compact) compact.checked = document.body.classList.contains('compact-mode');
+		}
+		_toggleSettingsModal(show) {
+			const modal = document.getElementById('coderadio-settings-modal');
+			if(!modal) return;
+			if(show) this._syncSettingsModal();
+			modal.classList.toggle('is-hidden', !show);
+		}
 	setupMediaSession() {
 		if(!('mediaSession' in navigator)) {
 			return;
 		}
+		// Guard against duplicate setup: _syncRadioToolbar() calls this
+		// on every shuffle/lock toggle, and the boot path calls it twice.
+		// Without this, we'd create orphan backing-audio elements and
+		// duplicate 'current' subscribers every time the user toggled a mode.
+		if(this._mediaSessionReady) return;
+		this._mediaSessionReady = true;
 		const ms = navigator.mediaSession;
+		// One Touch Next: when enabled, a single headset/notification press
+		// skips to the next track while playing, instead of pausing. This
+		// fixes the common Bluetooth problem where a double-tap to skip
+		// registers as a single press and accidentally pauses. Pausing is
+		// still available via the on-screen button (which calls
+		// playbackToggle directly, not via mediaSession).
+		try { this.oneTouchNext = localStorage.getItem('coderadio.oneTouchNext') === '1'; } catch(_) { this.oneTouchNext = false; }
+		const singlePress = (wouldBePlaying) => {
+			if(this.oneTouchNext && this.isPlaying) {
+				this.radioAdvance(1);
+			} else {
+				this.playbackToggle(wouldBePlaying, true);
+			}
+		};
 		// Play / Pause: composer's built-in audio toggle. playbackToggle()
 		// is the single owner of mediaSession.playbackState (and of the
 		// backing element's play/pause + the AudioContext resume), so the
 		// handlers just call it — no separate playbackState writes here, to
 		// avoid racing two sources of truth for the widget's icon.
 		ms.setActionHandler('play', () => this.playbackToggle(true, true));
-		ms.setActionHandler('pause', () => this.playbackToggle(false, true));
+		ms.setActionHandler('pause', () => singlePress(false));
 		// Some OSes route to a single toggle action instead of separate
 		// play/pause. Register the toggle as a safety net so a single
 		// keypress always flips state correctly.
 		try {
-			ms.setActionHandler('togglePlayPause', () => this.playbackToggle(!this.isPlaying, true));
+			ms.setActionHandler('togglePlayPause', () => singlePress(!this.isPlaying));
 		} catch(e) {}
 		// Next / Previous: walk the radio's active library list
 		// (sequential or weighted-shuffle depending on mode).

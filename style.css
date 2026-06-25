@@ -2628,9 +2628,9 @@ html.cat-active .cm-gutters {
 	transform: translate(-50%, 0);
 }
 
-/* Help modal (❓ button). Full-viewport backdrop + centered card; click
- * the backdrop or X (both data-help-dismiss) or Esc to close. */
-#coderadio-help-modal {
+/* Modal shell (❓ help + ⚙️ settings). Full-viewport backdrop + centered card;
+ * click the backdrop or X (data-*-dismiss) or Esc to close. */
+.coderadio-modal {
 	position: fixed;
 	inset: 0;
 	z-index: 200;
@@ -2639,7 +2639,7 @@ html.cat-active .cm-gutters {
 	justify-content: center;
 	padding: 16px;
 }
-#coderadio-help-modal.is-hidden {
+.coderadio-modal.is-hidden {
 	display: none;
 }
 .coderadio-help-backdrop {
@@ -2728,6 +2728,79 @@ html.cat-active .cm-gutters {
 	display: inline-block;
 	min-width: 1.5em;
 	text-align: center;
+}
+
+/* Settings modal rows (toggle switches). */
+.coderadio-setting {
+	display: flex;
+	align-items: flex-start;
+	gap: 14px;
+	margin: 14px 0 0;
+	padding: 12px 14px;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid rgba(255, 255, 255, 0.06);
+	border-radius: 8px;
+}
+.coderadio-setting-text {
+	flex: 1;
+	min-width: 0;
+}
+.coderadio-setting-title {
+	margin: 0;
+	font-weight: 600;
+	color: #fff;
+	font-size: 14px;
+}
+.coderadio-setting-desc {
+	margin: 4px 0 0;
+	color: #b0b8c3;
+	font-size: 13px;
+	line-height: 1.45;
+}
+
+/* Toggle switch — compact iOS-style slider. */
+.coderadio-switch {
+	position: relative;
+	display: inline-block;
+	width: 44px;
+	height: 26px;
+	flex-shrink: 0;
+	margin-top: 2px;
+}
+.coderadio-switch input {
+	position: absolute;
+	opacity: 0;
+	width: 0;
+	height: 0;
+}
+.coderadio-switch-slider {
+	position: absolute;
+	inset: 0;
+	background: #3a414d;
+	border-radius: 13px;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+.coderadio-switch-slider::before {
+	content: "";
+	position: absolute;
+	top: 3px;
+	left: 3px;
+	width: 20px;
+	height: 20px;
+	background: #fff;
+	border-radius: 50%;
+	transition: transform 0.2s;
+}
+.coderadio-switch input:checked + .coderadio-switch-slider {
+	background: #2e8b57;
+}
+.coderadio-switch input:checked + .coderadio-switch-slider::before {
+	transform: translateX(18px);
+}
+.coderadio-switch input:focus-visible + .coderadio-switch-slider {
+	outline: 2px solid #6fb0ff;
+	outline-offset: 2px;
 }
 
 

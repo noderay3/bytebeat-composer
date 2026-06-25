@@ -22,7 +22,7 @@
 <body>
 	<canvas id="coderadio-viz-canvas" aria-label="Visualizer background"></canvas>
 	<div id="coderadio-cat-toast" role="status" aria-live="polite"></div>
-	<div id="coderadio-help-modal" class="is-hidden" role="dialog" aria-modal="true" aria-labelledby="coderadio-help-title">
+	<div id="coderadio-help-modal" class="coderadio-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="coderadio-help-title">
 		<div class="coderadio-help-backdrop" data-help-dismiss></div>
 		<div class="coderadio-help-card" role="document">
 			<button id="coderadio-help-close" class="coderadio-help-close" aria-label="Close help" data-help-dismiss>×</button>
@@ -53,6 +53,7 @@
 					<dt><span class="coderadio-help-icon">🐱</span></dt><dd>Vibing cat. <strong>Long-press</strong> cycles 6 detector × dance-engine combos</dd>
 					<dt><span class="coderadio-help-icon">👍 👎 ⭐</span></dt><dd>Rate the currently-playing track</dd>
 					<dt><span class="coderadio-help-icon">ref</span></dt><dd>Open the bytebeat reference panel (left side)</dd>
+					<dt><span class="coderadio-help-icon">⚙️</span></dt><dd>Settings — playback &amp; usability preferences (incl. One Touch Next)</dd>
 					<dt><span class="coderadio-help-icon">❓</span></dt><dd>This help</dd>
 				</dl>
 			</section>
@@ -67,6 +68,34 @@
 					<li><strong>Vibing Cat / catJAM</strong> sprite — derived from the popular meme footage, included in good faith as transformative non-commercial use; see the <a href="https://github.com/noderay3/bytebeat-composer#vibing-cat--catjam-sprite" target="_blank" rel="noopener">README</a> for attribution + takedown contact</li>
 				</ul>
 			</section>
+		</div>
+	</div>
+	<div id="coderadio-settings-modal" class="coderadio-modal is-hidden" role="dialog" aria-modal="true" aria-labelledby="coderadio-settings-title">
+		<div class="coderadio-help-backdrop" data-settings-dismiss></div>
+		<div class="coderadio-help-card" role="document">
+			<button id="coderadio-settings-close" class="coderadio-help-close" aria-label="Close settings" data-settings-dismiss>×</button>
+			<h2 id="coderadio-settings-title">Settings</h2>
+			<p class="coderadio-help-lede">Playback &amp; usability preferences — saved on this device.</p>
+			<div class="coderadio-setting">
+				<label class="coderadio-switch">
+					<input type="checkbox" id="setting-one-touch-next">
+					<span class="coderadio-switch-slider"></span>
+				</label>
+				<div class="coderadio-setting-text">
+					<p class="coderadio-setting-title">One Touch Next</p>
+					<p class="coderadio-setting-desc">A single press on a Bluetooth headset or the notification card skips to the next track instead of pausing. Fixes double-taps that register as one press and accidentally pause. Pausing still works from the on-screen play button.</p>
+				</div>
+			</div>
+			<div class="coderadio-setting">
+				<label class="coderadio-switch">
+					<input type="checkbox" id="setting-compact">
+					<span class="coderadio-switch-slider"></span>
+				</label>
+				<div class="coderadio-setting-text">
+					<p class="coderadio-setting-title">Compact UI</p>
+					<p class="coderadio-setting-desc">Hide the composer's editor and controls, leaving just the radio toolbar and visualizer. Same as the 🎛 button.</p>
+				</div>
+			</div>
 		</div>
 	</div>
 	<main id="content">
@@ -174,6 +203,7 @@
 					<button id="control-viz-next" class="control-button" title="Next visualizer preset (Space)">🎲</button>
 					<button id="control-viz-auto" class="control-button" title="Auto-cycle presets — hard-cuts on bass kicks, max ~18s between swaps">🔁</button>
 					<button id="control-cat" class="control-button" title="Vibing cat (long-press to cycle detector × engine combos)">🐱</button>
+					<button id="control-settings" class="control-button" title="Settings">⚙️</button>
 					<button id="control-help" class="control-button" title="What is this? / button reference">❓</button>
 				</div>
 				<div class="controls-group coderadio-now-rating" id="coderadio-now-rating" title="Rate the currently-playing track">
