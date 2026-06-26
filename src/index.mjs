@@ -596,8 +596,17 @@ globalThis.bytebeat = new class {
 		} catch(e) {}
 		// Next / Previous: walk the radio's active library list
 		// (sequential or weighted-shuffle depending on mode).
+		// With One Touch Next, single-press already skips — repurpose
+		// the double-press (nexttrack) as play/pause so the user still
+		// has full control from the headset.
 		try {
-			ms.setActionHandler('nexttrack',     () => this.radioAdvance(1));
+			ms.setActionHandler('nexttrack', () => {
+				if(this.oneTouchNext) {
+					this.playbackToggle(!this.isPlaying, true);
+				} else {
+					this.radioAdvance(1);
+				}
+			});
 			ms.setActionHandler('previoustrack', () => this.radioAdvance(-1));
 		} catch(e) { /* unsupported in older browsers */ }
 		// Backing <audio> element for OS media-session integration.
